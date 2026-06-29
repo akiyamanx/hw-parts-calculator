@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  HW部材集計アプリ v0.3
+  HW部材集計アプリ v0.4
   HYPER Water 設置で使った部材と数量を集計するツール
   - 「HW工事材料.xlsx」の131部材を初期搭載(カテゴリ分け)
   - 個数部材: 単価 × 数量(プルダウン) = 金額
@@ -9,8 +9,10 @@
   - カテゴリ折りたたみ＋検索、画面下に小計・消費税・総合計を固定表示
   - 新規部材の登録／削除、消費税率変更、集計のテキストコピー
   - 印刷用集計表(マーフィード送付用)をワンタップ表示 → リコー等でPDF化
+  - 集計表の宛先・発行元(タイトル/宛先/会社名/住所)を画面から編集 → localStorage保存(v0.4・TODO3)
   作成: クロちゃん / COCOMI
-  ※プロトタイプ版。入力内容は再読み込みで消えます(本番化時にlocalStorage/D1で保存可能)
+  ※部材の数量・税率は再読込で消えるよ(localStorage保存は今後の課題=TODO1)
+  ※集計表の宛先・発行元(タイトル/宛先/会社名/住所)は localStorage に自動保存され、次回も残るよ(v0.4)
 -->
 <html lang="ja">
 <head>
@@ -184,6 +186,23 @@
   .pv-grand span:last-child{color:#0d3a44;}
   .pv-note{margin-top:22px;font-size:11px;color:#888;text-align:right;}
 
+  /* 集計表の宛先・発行元 設定カード(v0.4追加) */
+  .pp-section{background:var(--surface);border-radius:13px;box-shadow:var(--shadow);margin-top:10px;overflow:hidden;}
+  .pp-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px;background:none;border:none;cursor:pointer;font-family:inherit;text-align:left;}
+  .pp-toggle-l{display:flex;align-items:center;gap:8px;font-size:14.5px;font-weight:800;color:var(--ink);}
+  .pp-toggle-l svg{width:17px;height:17px;flex:none;}
+  .pp-chevron{width:13px;height:13px;opacity:.5;transition:transform .2s;flex:none;}
+  .pp-section.open .pp-chevron{transform:rotate(180deg);}
+  .pp-body{display:none;padding:0 14px 15px;}
+  .pp-section.open .pp-body{display:block;}
+  .pp-hint{font-size:11.5px;color:var(--ink-soft);font-weight:500;line-height:1.55;margin-bottom:13px;}
+  .pp-body .field textarea{width:100%;border:1.5px solid var(--line);border-radius:9px;padding:11px 12px;font-size:15px;color:var(--ink);font-family:inherit;background:#fff;resize:vertical;line-height:1.5;}
+  .pp-body .field textarea:focus{outline:none;border-color:var(--accent);}
+  .pp-reset-row{display:flex;justify-content:flex-end;margin-top:6px;}
+  .pp-reset{background:transparent;color:var(--ink-soft);border:1.5px solid var(--line);border-radius:9px;padding:9px 15px;font-size:12.5px;font-weight:600;cursor:pointer;}
+  .pp-reset:active{background:#eef3f4;}
+  .pv-toolbar .pv-edit{flex:none;padding-left:14px;padding-right:14px;background:#eef0f1;color:var(--accent-deep);}
+
   @media print{
     body{background:#fff !important;}
     body > *:not(.print-view){display:none !important;}
@@ -259,12 +278,46 @@
       <button class="btn-ghost" id="cancelBtn">やめる</button>
     </div>
   </div>
+
+  <!-- 集計表の宛先・発行元 設定(印刷用・localStorageに自動保存) v0.4追加 -->
+  <div class="pp-section" id="ppSection">
+    <button class="pp-toggle" id="ppToggle" type="button">
+      <span class="pp-toggle-l">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#0a9396" stroke-width="2"><path d="M6 2h9l5 5v15H6V2z"/><path d="M14 2v6h6"/><path d="M9 13h6M9 17h6"/></svg>
+        集計表の宛先・発行元
+      </span>
+      <svg class="pp-chevron" viewBox="0 0 24 24" fill="none" stroke="#16323d" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+    </button>
+    <div class="pp-body">
+      <p class="pp-hint">印刷する集計表の上に出る宛先・発行元だよ。変更するとその場で自動保存されて、次にアプリを開いた時も残るよ。</p>
+      <div class="field">
+        <label>集計表のタイトル</label>
+        <input type="text" id="ppTitle" autocomplete="off">
+      </div>
+      <div class="field">
+        <label>宛先(送り先)</label>
+        <input type="text" id="ppTo" autocomplete="off" placeholder="例：マーフィード　御中">
+      </div>
+      <div class="field">
+        <label>発行元 会社名</label>
+        <input type="text" id="ppFromName" autocomplete="off" placeholder="例：株式会社AKC Total Support">
+      </div>
+      <div class="field">
+        <label>発行元 住所・連絡先(改行OK)</label>
+        <textarea id="ppFromAddr" rows="3" placeholder="例：千葉県袖ケ浦市〇〇&#10;TEL：0438-XX-XXXX"></textarea>
+      </div>
+      <div class="pp-reset-row">
+        <button class="pp-reset" id="ppReset" type="button">初期値に戻す</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- 印刷用 集計表ビュー(マーフィード送付用) -->
 <div class="print-view" id="printView">
   <div class="pv-toolbar">
     <button class="pv-close" id="pvClose">✕ 閉じる</button>
+    <button class="pv-edit" id="pvEdit" type="button">✎ 編集</button>
     <button class="pv-print" id="pvPrint">
       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
       印刷 / PDF
@@ -314,6 +367,53 @@
   const listEl = document.getElementById("list");
   const searchEl = document.getElementById("search");
   const usedOnlyEl = document.getElementById("usedOnly");
+
+  // ===== 集計表の宛先・発行元(印刷用・localStorage保存) v0.4追加 =====
+  // 印刷集計表の上部テキスト(タイトル/宛先/会社名/住所)を画面から編集して保存する
+  const PP_KEY = "hwParts.printParties.v1";
+  const PP_DEFAULTS = {
+    title: "HW工事　部材集計",
+    to: "マーフィード　御中",
+    fromName: "株式会社AKC Total Support",
+    fromAddr: "千葉県袖ケ浦市"
+  };
+  let printParties = loadParties();
+
+  // localStorageから読み込み(無ければ既定値。壊れていても既定値で動く)
+  function loadParties(){
+    try{
+      const raw = localStorage.getItem(PP_KEY);
+      if(raw){ return Object.assign({}, PP_DEFAULTS, JSON.parse(raw)); }
+    }catch(e){ /* localStorage不可/JSON破損 → 既定値にフォールバック */ }
+    return Object.assign({}, PP_DEFAULTS);
+  }
+  // localStorageへ保存(プライベートモード等で失敗しても画面動作は継続)
+  function saveParties(){
+    try{ localStorage.setItem(PP_KEY, JSON.stringify(printParties)); }
+    catch(e){ /* 保存不可でも無視して続行 */ }
+  }
+  // 設定カードの入力欄に現在値を流し込む
+  function fillPartyFields(){
+    document.getElementById("ppTitle").value    = printParties.title;
+    document.getElementById("ppTo").value       = printParties.to;
+    document.getElementById("ppFromName").value = printParties.fromName;
+    document.getElementById("ppFromAddr").value = printParties.fromAddr;
+  }
+  // 入力欄の変更を監視して即保存(リスナーは初期化時に1回だけ張る)
+  function bindPartyFields(){
+    const map = { ppTitle:"title", ppTo:"to", ppFromName:"fromName", ppFromAddr:"fromAddr" };
+    Object.entries(map).forEach(([elId, key]) => {
+      document.getElementById(elId).addEventListener("input", e => {
+        printParties[key] = e.target.value;
+        saveParties();
+      });
+    });
+  }
+  // 発行元(会社名＋住所)を印刷用HTMLに整形。住所の改行は<br>に変換
+  function ppFromHtml(){
+    const addr = (printParties.fromAddr || "").trim();
+    return esc(printParties.fromName) + (addr ? "<br>" + esc(printParties.fromAddr).replace(/\n/g, "<br>") : "");
+  }
 
   function render(){
     const q = searchEl.value.trim().toLowerCase();
@@ -640,12 +740,12 @@
 
     document.getElementById("pvPage").innerHTML = `
       <div class="pv-head">
-        <div class="pv-title">HW工事　部材集計</div>
+        <div class="pv-title">${esc(printParties.title)}</div>
         <div class="pv-date">発行日：${dstr}</div>
       </div>
       <div class="pv-parties">
-        <div class="pv-to">マーフィード　御中</div>
-        <div class="pv-from">株式会社AKC Total Support<br>千葉県袖ケ浦市</div>
+        <div class="pv-to">${esc(printParties.to)}</div>
+        <div class="pv-from">${ppFromHtml()}</div>
       </div>
       <table class="pv-table">
         <thead><tr><th>品名・規格</th><th class="r">単価</th><th class="r">数量</th><th class="r">金額</th></tr></thead>
@@ -674,6 +774,30 @@
   document.getElementById("taxRate").addEventListener("input", renderTotals);
   searchEl.addEventListener("input", render);
   usedOnlyEl.addEventListener("change", render);
+
+  // ===== 集計表の宛先・発行元 設定の初期化＆イベント(v0.4追加) =====
+  fillPartyFields();   // 保存値(または既定値)を入力欄へ反映
+  bindPartyFields();   // 入力の自動保存を有効化
+  // カードの開閉
+  document.getElementById("ppToggle").addEventListener("click", () => {
+    document.getElementById("ppSection").classList.toggle("open");
+  });
+  // 初期値に戻す
+  document.getElementById("ppReset").addEventListener("click", () => {
+    if(!confirm("集計表の宛先・発行元を初期値に戻す？")) return;
+    printParties = Object.assign({}, PP_DEFAULTS);
+    saveParties();
+    fillPartyFields();
+  });
+  // 印刷ビューの「✎ 編集」→ ビューを閉じて設定カードを開いてスクロール
+  document.getElementById("pvEdit").addEventListener("click", () => {
+    document.getElementById("printView").classList.remove("open");
+    document.body.style.overflow = "";
+    const sec = document.getElementById("ppSection");
+    sec.classList.add("open");
+    sec.scrollIntoView({ behavior:"smooth", block:"center" });
+    document.getElementById("ppTo").focus();
+  });
 
   render();
 </script>
