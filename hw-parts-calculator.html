@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<!--
+  HW部材集計アプリ v0.3
+  HYPER Water 設置で使った部材と数量を集計するツール
+  - 「HW工事材料.xlsx」の131部材を初期搭載(カテゴリ分け)
+  - 個数部材: 単価 × 数量(プルダウン) = 金額
+  - 長物部材(配線/ホース/巻物): 購入金額 ÷ 購入長 = 1m単価、使用m × 1m単価 = 金額
+  - 各部材の単価/購入金額/購入長/モード(個数⇔メートル)を編集可能(価格変動に対応)
+  - カテゴリ折りたたみ＋検索、画面下に小計・消費税・総合計を固定表示
+  - 新規部材の登録／削除、消費税率変更、集計のテキストコピー
+  - 印刷用集計表(マーフィード送付用)をワンタップ表示 → リコー等でPDF化
+  作成: クロちゃん / COCOMI
+  ※プロトタイプ版。入力内容は再読み込みで消えます(本番化時にlocalStorage/D1で保存可能)
+-->
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>HW部材集計</title>
+<style>
+  :root{
+    --bg:#e9eff1; --surface:#ffffff; --ink:#16323d; --ink-soft:#5d7480;
+    --accent:#0a9396; --accent-deep:#067074; --line:#d5e0e4;
+    --danger:#c1432e; --total-bg:#0d3a44; --len:#b5651d;
+    --shadow:0 1px 3px rgba(13,58,68,.10),0 6px 18px rgba(13,58,68,.06);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:-apple-system,"Segoe UI",Roboto,"Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;line-height:1.4;}
+  .num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum";}
+  .wrap{max-width:600px;margin:0 auto;padding:0 12px 210px;}
+
+  header{padding:20px 4px 12px;}
+  .title{display:flex;align-items:center;gap:9px;font-size:21px;font-weight:800;}
+  .drop{width:23px;height:23px;flex:none;}
+  .subtitle{margin-top:3px;color:var(--ink-soft);font-size:12.5px;font-weight:500;padding-left:32px;}
+
+  .toolbar{position:sticky;top:0;z-index:20;background:var(--bg);padding:8px 0 10px;}
+  .search-box{position:relative;}
+  .search-box svg{position:absolute;left:12px;top:50%;transform:translateY(-50%);width:17px;height:17px;opacity:.5;}
+  .search-box input{width:100%;border:1.5px solid var(--line);border-radius:11px;background:var(--surface);padding:12px 14px 12px 38px;font-size:15px;color:var(--ink);font-family:inherit;}
+  .search-box input:focus{outline:none;border-color:var(--accent);}
+  .filter-row{display:flex;align-items:center;gap:10px;margin-top:9px;padding:0 2px;}
+  .toggle{display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px;color:var(--ink-soft);font-weight:600;user-select:none;}
+  .toggle input{display:none;}
+  .toggle .sw{width:38px;height:22px;background:var(--line);border-radius:20px;position:relative;transition:background .18s;flex:none;}
+  .toggle .sw::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;transition:transform .18s;box-shadow:0 1px 2px rgba(0,0,0,.2);}
+  .toggle input:checked + .sw{background:var(--accent);}
+  .toggle input:checked + .sw::after{transform:translateX(16px);}
+  .expand-all{margin-left:auto;font-size:12.5px;color:var(--accent-deep);font-weight:700;background:none;border:none;cursor:pointer;padding:4px;}
+
+  .cat{background:var(--surface);border-radius:13px;box-shadow:var(--shadow);margin-bottom:9px;overflow:hidden;}
+  .cat-head{width:100%;display:flex;align-items:center;gap:10px;padding:14px 14px;background:none;border:none;cursor:pointer;text-align:left;font-family:inherit;}
+  .cat-name{font-size:15px;font-weight:800;color:var(--ink);}
+  .cat-badge{background:var(--accent);color:#fff;font-size:11px;font-weight:700;border-radius:20px;padding:2px 9px;display:none;}
+  .cat-badge.show{display:inline-block;}
+  .cat-sub{margin-left:auto;display:flex;align-items:center;gap:11px;}
+  .cat-sum{font-size:13.5px;font-weight:700;color:var(--accent-deep);font-variant-numeric:tabular-nums;}
+  .cat-sum.zero{color:#b9c6cc;font-weight:600;}
+  .chevron{width:13px;height:13px;transition:transform .2s;flex:none;opacity:.5;}
+  .cat.open .chevron{transform:rotate(180deg);}
+  .cat-count{font-size:11.5px;color:var(--ink-soft);font-weight:500;}
+  .cat-body{display:none;padding:0 10px 8px;}
+  .cat.open .cat-body{display:block;}
+
+  .item{padding:11px 11px;border-top:1px solid var(--line);}
+  .item:first-child{border-top:none;}
+  .item.has-qty{background:#f3fbfb;border-radius:9px;}
+  .item.is-length.has-qty{background:#fbf5ee;}
+  .item-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:8px;}
+  .item-name{font-size:14.5px;font-weight:700;line-height:1.3;word-break:break-word;}
+  .item-meta{font-size:11.5px;color:var(--ink-soft);font-weight:500;margin-top:2px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+  .item-meta .size-tag{color:var(--accent-deep);font-weight:700;}
+  .len-chip{background:#f3e6d6;color:var(--len);font-weight:700;border-radius:5px;padding:1px 6px;font-size:10.5px;}
+  .item-actions{display:flex;gap:5px;flex:none;}
+  .icon-btn{width:28px;height:28px;border-radius:7px;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;}
+  .edit{background:#eef3f4;color:var(--ink-soft);}
+  .edit:active{background:#e0eaec;}
+  .del{background:#f4eceb;color:var(--danger);font-size:16px;}
+  .del:active{background:#f0dcd9;}
+
+  /* 個数モードの行 */
+  .item-bottom{display:flex;align-items:center;gap:8px;}
+  .price{color:var(--ink-soft);font-size:13.5px;font-weight:600;font-variant-numeric:tabular-nums;}
+  .times,.eq{color:var(--ink-soft);font-size:13px;}
+  select.qty{appearance:none;-webkit-appearance:none;background:#f1f6f7 url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%230a9396' stroke-width='3'><path d='M6 9l6 6 6-6'/></svg>") no-repeat right 9px center;border:1.5px solid var(--line);border-radius:9px;padding:8px 28px 8px 12px;font-size:15px;font-weight:700;color:var(--ink);cursor:pointer;min-width:64px;font-variant-numeric:tabular-nums;}
+  select.qty:focus{outline:none;border-color:var(--accent);}
+  select.qty.active{border-color:var(--accent);background-color:#e3f4f4;}
+  .amount{margin-left:auto;font-size:15px;font-weight:800;font-variant-numeric:tabular-nums;}
+  .amount.zero{color:#c2cfd4;font-weight:600;}
+
+  /* 長物モードの行 */
+  .len-row{display:flex;flex-direction:column;gap:7px;}
+  .len-calc{font-size:12px;color:var(--ink-soft);font-weight:600;font-variant-numeric:tabular-nums;}
+  .len-calc .um{color:var(--len);font-weight:800;}
+  .len-use{display:flex;align-items:center;gap:8px;}
+  .len-use .lbl{font-size:13px;color:var(--ink-soft);font-weight:600;}
+  input.use-m{width:74px;border:1.5px solid var(--line);border-radius:9px;padding:8px 10px;font-size:15px;font-weight:700;color:var(--ink);font-family:inherit;text-align:right;font-variant-numeric:tabular-nums;}
+  input.use-m:focus{outline:none;border-color:var(--len);}
+  input.use-m.active{border-color:var(--len);background:#fbf2e8;}
+  .len-use .um-unit{font-size:13px;color:var(--ink-soft);margin-left:-3px;}
+
+  /* 編集パネル */
+  .edit-panel{margin-top:10px;background:#f7fafb;border:1.5px solid var(--accent);border-radius:10px;padding:13px;}
+  .ep-modes{display:flex;gap:8px;margin-bottom:11px;}
+  .ep-mode{flex:1;}
+  .ep-mode input{display:none;}
+  .ep-mode span{display:block;text-align:center;padding:8px;border:1.5px solid var(--line);border-radius:8px;font-size:13px;font-weight:700;color:var(--ink-soft);background:#fff;cursor:pointer;}
+  .ep-mode input:checked + span{border-color:var(--accent);background:var(--accent);color:#fff;}
+  .ep-fields{display:flex;gap:9px;}
+  .ep-f{flex:1;}
+  .ep-f label{display:block;font-size:11px;font-weight:600;color:var(--ink-soft);margin-bottom:4px;}
+  .ep-f input{width:100%;border:1.5px solid var(--line);border-radius:8px;padding:9px 10px;font-size:15px;color:var(--ink);font-family:inherit;font-variant-numeric:tabular-nums;}
+  .ep-f input:focus{outline:none;border-color:var(--accent);}
+  .ep-hint{font-size:11px;color:var(--len);font-weight:600;margin-top:7px;font-variant-numeric:tabular-nums;}
+  .ep-actions{display:flex;gap:8px;margin-top:11px;}
+  .ep-save{flex:1;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px;font-size:13.5px;font-weight:700;cursor:pointer;}
+  .ep-save:active{background:var(--accent-deep);}
+  .ep-cancel{background:#fff;color:var(--ink-soft);border:1.5px solid var(--line);border-radius:8px;padding:10px 16px;font-size:13px;font-weight:600;cursor:pointer;}
+
+  .no-result{text-align:center;color:var(--ink-soft);padding:34px 10px;font-size:14px;}
+
+  .add-btn{width:100%;background:var(--surface);border:1.5px dashed var(--accent);color:var(--accent-deep);border-radius:13px;padding:14px;font-size:14.5px;font-weight:700;cursor:pointer;margin-top:4px;display:flex;align-items:center;justify-content:center;gap:7px;}
+  .add-btn:active{background:#eef9f9;}
+  .add-form{background:var(--surface);border-radius:13px;box-shadow:var(--shadow);padding:16px 15px;margin-top:4px;border:1px solid var(--accent);display:none;}
+  .add-form.open{display:block;}
+  .add-form h3{font-size:14px;font-weight:800;margin-bottom:13px;}
+  .field{margin-bottom:11px;}
+  .field label{display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:5px;}
+  .field input,.field select{width:100%;border:1.5px solid var(--line);border-radius:9px;padding:11px 12px;font-size:15px;color:var(--ink);font-family:inherit;background:#fff;}
+  .field input:focus,.field select:focus{outline:none;border-color:var(--accent);}
+  .field-row{display:flex;gap:10px;}
+  .field-row .field{flex:1;}
+  .form-actions{display:flex;gap:9px;margin-top:4px;}
+  .btn-primary{flex:1;background:var(--accent);color:#fff;border:none;border-radius:9px;padding:12px;font-size:14.5px;font-weight:700;cursor:pointer;}
+  .btn-primary:active{background:var(--accent-deep);}
+  .btn-ghost{background:transparent;color:var(--ink-soft);border:1.5px solid var(--line);border-radius:9px;padding:12px 16px;font-size:14px;font-weight:600;cursor:pointer;}
+  .form-err{color:var(--danger);font-size:12px;margin-bottom:9px;display:none;}
+  .form-err.show{display:block;}
+
+  .totalbar{position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--surface);box-shadow:0 -3px 16px rgba(13,58,68,.13);border-top-left-radius:16px;border-top-right-radius:16px;}
+  .tb-inner{max-width:600px;margin:0 auto;padding:12px 16px calc(12px + env(safe-area-inset-bottom));}
+  .tb-rows{display:flex;align-items:center;gap:14px;margin-bottom:10px;}
+  .tb-col{flex:1;}
+  .tb-label{font-size:11px;color:var(--ink-soft);font-weight:600;display:flex;align-items:center;gap:4px;}
+  .tb-val{font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:1px;}
+  .tb-grand{background:var(--total-bg);border-radius:10px;padding:7px 12px;color:#fff;}
+  .tb-grand .tb-label{color:#fff;opacity:.85;}
+  .tb-grand .tb-val{font-size:19px;font-weight:800;}
+  .tax-input{width:42px;border:1px solid var(--line);border-radius:6px;padding:2px 4px;font-size:12px;text-align:center;color:var(--ink);font-family:inherit;font-variant-numeric:tabular-nums;}
+  .tax-input:focus{outline:none;border-color:var(--accent);}
+  .tb-meta{margin-bottom:7px;}
+  .used-pill{font-size:12px;color:var(--ink-soft);font-weight:600;}
+  .tb-actions{display:flex;gap:9px;}
+  .copy-btn{flex:1;background:#eef6f7;color:var(--accent-deep);border:1.5px solid var(--line);border-radius:9px;padding:9px;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;}
+  .copy-btn:active{background:#e0f1f1;}
+  .copy-btn.done{background:var(--accent);color:#fff;border-color:var(--accent);}
+
+  .print-view{display:none;position:fixed;inset:0;z-index:100;background:#e7e9ea;overflow:auto;-webkit-overflow-scrolling:touch;}
+  .print-view.open{display:block;}
+  .pv-toolbar{position:sticky;top:0;display:flex;gap:10px;padding:11px 14px calc(11px + env(safe-area-inset-top));background:#fff;box-shadow:0 1px 6px rgba(0,0,0,.12);z-index:2;}
+  .pv-toolbar button{flex:1;border:none;border-radius:9px;padding:12px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;}
+  .pv-close{background:#eef0f1;color:var(--ink-soft);}
+  .pv-print{background:var(--accent);color:#fff;}
+  .pv-print:active{background:var(--accent-deep);}
+  .pv-page{background:#fff;max-width:700px;margin:16px auto 40px;padding:32px 28px;box-shadow:0 2px 12px rgba(0,0,0,.1);color:#1a1a1a;font-size:13px;line-height:1.45;}
+  .pv-head{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2.5px solid #16323d;padding-bottom:9px;margin-bottom:15px;}
+  .pv-title{font-size:21px;font-weight:800;letter-spacing:.05em;}
+  .pv-date{font-size:12.5px;color:#444;}
+  .pv-parties{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;gap:16px;}
+  .pv-to{font-size:16.5px;font-weight:700;border-bottom:1px solid #16323d;padding:0 16px 2px 2px;}
+  .pv-from{font-size:12px;text-align:right;line-height:1.65;color:#333;}
+  .pv-table{width:100%;border-collapse:collapse;font-size:12px;}
+  .pv-table th{background:#16323d;color:#fff;font-weight:700;padding:7px 8px;text-align:left;border:1px solid #16323d;}
+  .pv-table th.r{text-align:right;}
+  .pv-table td{padding:6px 8px;border:1px solid #cdd3d5;vertical-align:top;}
+  .pv-nm{font-weight:600;}
+  .pv-sz{color:#555;white-space:nowrap;}
+  .pv-r{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}
+  .pv-catrow td{background:#eaf1f2;font-weight:800;font-size:11.5px;color:#0d3a44;padding:5px 8px;letter-spacing:.02em;}
+  .pv-totals{margin:16px 0 0 auto;width:270px;}
+  .pv-trow{display:flex;justify-content:space-between;padding:7px 6px;font-size:13.5px;border-bottom:1px solid #e0e0e0;}
+  .pv-trow span:last-child{font-variant-numeric:tabular-nums;font-weight:700;}
+  .pv-grand{border-top:2px solid #16323d;border-bottom:none;margin-top:3px;padding-top:10px;font-size:18px;font-weight:800;}
+  .pv-grand span:last-child{color:#0d3a44;}
+  .pv-note{margin-top:22px;font-size:11px;color:#888;text-align:right;}
+
+  @media print{
+    body{background:#fff !important;}
+    body > *:not(.print-view){display:none !important;}
+    .print-view{position:static !important;display:block !important;background:#fff !important;overflow:visible !important;}
+    .pv-toolbar{display:none !important;}
+    .pv-page{margin:0 !important;box-shadow:none !important;max-width:none !important;padding:0 !important;}
+    @page{margin:14mm;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="title">
+      <svg class="drop" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 2.5C12 2.5 5 10 5 14.5C5 18.5 8.13 21.5 12 21.5C15.87 21.5 19 18.5 19 14.5C19 10 12 2.5 12 2.5Z" fill="#0a9396"/>
+        <path d="M9 14.5C9 16.16 10.34 17.5 12 17.5" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>
+      </svg>
+      HW部材集計
+    </div>
+    <div class="subtitle">HYPER Water 設置で使った部材を集計</div>
+  </header>
+
+  <div class="toolbar">
+    <div class="search-box">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#16323d" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      <input type="text" id="search" placeholder="部材名で検索" autocomplete="off">
+    </div>
+    <div class="filter-row">
+      <label class="toggle"><input type="checkbox" id="usedOnly"><span class="sw"></span>使った部材だけ表示</label>
+      <button class="expand-all" id="expandAll">すべて開く</button>
+    </div>
+  </div>
+
+  <div id="list"></div>
+
+  <button class="add-btn" id="addBtn"><span style="font-size:18px;line-height:1;">＋</span> 新しい部材を追加</button>
+
+  <div class="add-form" id="addForm">
+    <h3>新しい部材を登録</h3>
+    <div class="form-err" id="formErr">商品名と金額は必須だよ</div>
+    <div class="field">
+      <label>カテゴリ</label>
+      <select id="newCat"></select>
+    </div>
+    <div class="field">
+      <label>商品名</label>
+      <input type="text" id="newName" placeholder="例：HI エルボ" autocomplete="off">
+    </div>
+    <div class="field">
+      <label>数え方</label>
+      <div class="ep-modes">
+        <label class="ep-mode"><input type="radio" name="newMode" value="piece" checked><span>個数で数える</span></label>
+        <label class="ep-mode"><input type="radio" name="newMode" value="length"><span>メートルで数える</span></label>
+      </div>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>呼び径・規格(任意)</label>
+        <input type="text" id="newSize" placeholder="20A" autocomplete="off">
+      </div>
+      <div class="field" id="newPriceWrap">
+        <label id="newPriceLbl">単価(円)</label>
+        <input type="number" id="newPrice" placeholder="59" inputmode="numeric" min="0">
+      </div>
+      <div class="field" id="newLenWrap" style="display:none;">
+        <label>購入長(m)</label>
+        <input type="number" id="newLen" placeholder="100" inputmode="decimal" min="0" step="0.1">
+      </div>
+    </div>
+    <div class="form-actions">
+      <button class="btn-primary" id="saveBtn">追加する</button>
+      <button class="btn-ghost" id="cancelBtn">やめる</button>
+    </div>
+  </div>
+</div>
+
+<!-- 印刷用 集計表ビュー(マーフィード送付用) -->
+<div class="print-view" id="printView">
+  <div class="pv-toolbar">
+    <button class="pv-close" id="pvClose">✕ 閉じる</button>
+    <button class="pv-print" id="pvPrint">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+      印刷 / PDF
+    </button>
+  </div>
+  <div class="pv-page" id="pvPage"></div>
+</div>
+
+<!-- 下部固定 合計バー -->
+<div class="totalbar">
+  <div class="tb-inner">
+    <div class="tb-rows">
+      <div class="tb-col"><div class="tb-label">小計</div><div class="tb-val num" id="subtotal">¥0</div></div>
+      <div class="tb-col"><div class="tb-label">消費税 <input type="number" class="tax-input num" id="taxRate" value="10" min="0" max="100">%</div><div class="tb-val num" id="taxAmount">¥0</div></div>
+      <div class="tb-col tb-grand"><div class="tb-label">総合計</div><div class="tb-val num" id="grandTotal">¥0</div></div>
+    </div>
+    <div class="tb-meta"><span class="used-pill" id="usedPill">0点 使用中</span></div>
+    <div class="tb-actions">
+      <button class="copy-btn" id="copyBtn">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+        テキストでコピー
+      </button>
+      <button class="copy-btn" id="makePvBtn">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2h9l5 5v15H6V2z"/><path d="M14 2v6h6"/><path d="M9 13h6M9 17h6"/></svg>
+        集計表を作成
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ===== 部材データ(HW工事材料.xlsx より131件) =====
+  // mode:'piece'=個数(price=単価, qty=個数) / 'length'=長物(price=購入金額, packLen=購入長m, qty=使用m)
+  let materials = [{"id": 1, "cat": "HIVP", "name": "HI　エルボ", "size": "20A", "mode": "piece", "price": 59, "packLen": 0, "qty": 0}, {"id": 2, "cat": "HIVP", "name": "HI　エルボ", "size": "25A", "mode": "piece", "price": 92, "packLen": 0, "qty": 0}, {"id": 3, "cat": "HIVP", "name": "HI　ソケット", "size": "20A", "mode": "piece", "price": 49, "packLen": 0, "qty": 0}, {"id": 4, "cat": "HIVP", "name": "HI　ソケット", "size": "25A", "mode": "piece", "price": 71, "packLen": 0, "qty": 0}, {"id": 5, "cat": "HIVP", "name": "HI　チーズ", "size": "20A", "mode": "piece", "price": 92, "packLen": 0, "qty": 0}, {"id": 6, "cat": "HIVP", "name": "HI　チーズ", "size": "25A", "mode": "piece", "price": 139, "packLen": 0, "qty": 0}, {"id": 7, "cat": "HIVP", "name": "HI　イケイソケット", "size": "20A×25A", "mode": "piece", "price": 70, "packLen": 0, "qty": 0}, {"id": 8, "cat": "HIVP", "name": "HI　45℃", "size": "20A", "mode": "piece", "price": 88, "packLen": 0, "qty": 0}, {"id": 9, "cat": "HIVP", "name": "ＨＩ　キャップ", "size": "20Ａ", "mode": "piece", "price": 45, "packLen": 0, "qty": 0}, {"id": 10, "cat": "HIVP", "name": "HI　バルブソケット（インサート付き）", "size": "20A", "mode": "piece", "price": 339, "packLen": 0, "qty": 0}, {"id": 11, "cat": "HIVP", "name": "HI　バルブソケット（インサート付き）", "size": "25A", "mode": "piece", "price": 549, "packLen": 0, "qty": 0}, {"id": 12, "cat": "HIVP", "name": "HI　ユニオン", "size": "20Ａ", "mode": "piece", "price": 1298, "packLen": 0, "qty": 0}, {"id": 13, "cat": "HIVP", "name": "ＨＩＶＰ20Ａ　4ｍ", "size": "20Ａ", "mode": "length", "price": 790, "packLen": 4, "qty": 0}, {"id": 14, "cat": "鋼管", "name": "エルボ水道用樹脂コーティング管継手", "size": "15A", "mode": "piece", "price": 229, "packLen": 0, "qty": 0}, {"id": 15, "cat": "鋼管", "name": "チーズ水道用樹脂コーティング管継手", "size": "15A", "mode": "piece", "price": 369, "packLen": 0, "qty": 0}, {"id": 16, "cat": "鋼管", "name": "六角ニップル水道用樹脂コーティング管継手", "size": "15A", "mode": "piece", "price": 379, "packLen": 0, "qty": 0}, {"id": 17, "cat": "鋼管", "name": "エルボ水道用樹脂コーティング管継手", "size": "20A（PV）", "mode": "piece", "price": 269, "packLen": 0, "qty": 0}, {"id": 18, "cat": "鋼管", "name": "チーズ水道用樹脂コーティング管継手", "size": "20A（PV）", "mode": "piece", "price": 409, "packLen": 0, "qty": 0}, {"id": 19, "cat": "鋼管", "name": "ソケット水道用樹脂コーティング管継手", "size": "20A（PV）", "mode": "piece", "price": 369, "packLen": 0, "qty": 0}, {"id": 20, "cat": "鋼管", "name": "六角ニップル水道用樹脂コーティング管継手", "size": "20A（PV）", "mode": "piece", "price": 379, "packLen": 0, "qty": 0}, {"id": 21, "cat": "鋼管", "name": "ストリートエルボ", "size": "20A（PV）", "mode": "piece", "price": 929, "packLen": 0, "qty": 0}, {"id": 22, "cat": "鋼管", "name": "エルボ水道用樹脂コーティング管継手", "size": "25A", "mode": "piece", "price": 439, "packLen": 0, "qty": 0}, {"id": 23, "cat": "鋼管", "name": "チーズ水道用樹脂コーティング管継手", "size": "25A", "mode": "piece", "price": 649, "packLen": 0, "qty": 0}, {"id": 24, "cat": "鋼管", "name": "六角ニップル水道用樹脂コーティング管継手", "size": "25A", "mode": "piece", "price": 479, "packLen": 0, "qty": 0}, {"id": 25, "cat": "鋼管", "name": "ソケット水道用樹脂コーティング管継手", "size": "25A", "mode": "piece", "price": 459, "packLen": 0, "qty": 0}, {"id": 26, "cat": "鋼管", "name": "ストリートエルボ", "size": "25Ａ", "mode": "piece", "price": 1398, "packLen": 0, "qty": 0}, {"id": 27, "cat": "鋼管", "name": "ブッシング水道用樹脂コーティング管継ぎ手", "size": "20Ａ×15Ａ", "mode": "piece", "price": 609, "packLen": 0, "qty": 0}, {"id": 28, "cat": "鋼管", "name": "ブッシング水道用樹脂コーティング管継ぎ手", "size": "25A×20A", "mode": "piece", "price": 769, "packLen": 0, "qty": 0}, {"id": 29, "cat": "鋼管", "name": "径違いチーズ水道用樹脂コーティング管継手", "size": "25A×20A（PV）", "mode": "piece", "price": 789, "packLen": 0, "qty": 0}, {"id": 30, "cat": "鋼管", "name": "径違いエルボ水道用樹脂コーティング管継手", "size": "25A×20A（PV）", "mode": "piece", "price": 719, "packLen": 0, "qty": 0}, {"id": 31, "cat": "鋼管", "name": "短管ニップル100ミリ水道用樹脂コーティング継ぎ手", "size": "25A（PV）", "mode": "piece", "price": 939, "packLen": 0, "qty": 0}, {"id": 32, "cat": "鋼管", "name": "短管ニップル125ミリ水道用樹脂コーティング継ぎ手", "size": "25Ａ", "mode": "piece", "price": 999, "packLen": 0, "qty": 0}, {"id": 33, "cat": "鋼管", "name": "短管ニップル75ｍｍ水道用樹脂コーティング管継手", "size": "20A（PV）", "mode": "piece", "price": 559, "packLen": 0, "qty": 0}, {"id": 34, "cat": "鋼管", "name": "異型チーズ（コーティング）２０×15", "size": "20Ａ×15Ａ", "mode": "piece", "price": 549, "packLen": 0, "qty": 0}, {"id": 35, "cat": "鋼管", "name": "イケイチーズ（コーティング）２5×15", "size": "25Ａ×15Ａ", "mode": "piece", "price": 789, "packLen": 0, "qty": 0}, {"id": 36, "cat": "鋼管", "name": "ポンプ用ブッシング32Ａ×25Ａ", "size": "32×25", "mode": "piece", "price": 1190, "packLen": 0, "qty": 0}, {"id": 37, "cat": "鋼管", "name": "ポンプ用ブッシング32Ａ×20Ａ", "size": "32×20", "mode": "piece", "price": 1190, "packLen": 0, "qty": 0}, {"id": 38, "cat": "バルブ", "name": "ボールバルブエア抜き用蝶ハンドル", "size": "15Ａ", "mode": "piece", "price": 2498, "packLen": 0, "qty": 0}, {"id": 39, "cat": "バルブ", "name": "FMボールバルブG13A　白　メス-オス", "size": "15A", "mode": "piece", "price": 3290, "packLen": 0, "qty": 0}, {"id": 40, "cat": "バルブ", "name": "ニッケルメッキフルボアボールバルブ 蝶ハンドル　黄銅", "size": "20A", "mode": "piece", "price": 2190, "packLen": 0, "qty": 0}, {"id": 41, "cat": "バルブ", "name": "逆止弁付きボールバルブ　（メスメス　Ｒネジ）", "size": "20Ａ", "mode": "piece", "price": 2190, "packLen": 0, "qty": 0}, {"id": 42, "cat": "バルブ", "name": "ゲートバルブ20Ａ", "size": "20Ａ", "mode": "piece", "price": 1990, "packLen": 0, "qty": 0}, {"id": 43, "cat": "バルブ", "name": "ボールバルブ フルボア黄銅 （ポンプ後、レバータイプ）", "size": "25A", "mode": "piece", "price": 1990, "packLen": 0, "qty": 0}, {"id": 44, "cat": "ホースニップル", "name": "ホースニップル　内径１５用", "size": "15Ａ", "mode": "piece", "price": 189, "packLen": 0, "qty": 0}, {"id": 45, "cat": "ホースニップル", "name": "ナット付ホースニップル適合ホース内径15ミリ用　（16ｍｍ）", "size": "ねじ径20A", "mode": "piece", "price": 999, "packLen": 0, "qty": 0}, {"id": 46, "cat": "ホースニップル", "name": "ナット付ホースニップル適合ホース内径19ミリ用　（20.5ｍｍ）", "size": "ねじ径20A", "mode": "piece", "price": 999, "packLen": 0, "qty": 0}, {"id": 47, "cat": "ホースニップル", "name": "オスホースニップル20.5ｍｍ", "size": "20Ａ", "mode": "piece", "price": 569, "packLen": 0, "qty": 0}, {"id": 48, "cat": "ホースニップル", "name": "デカホースニップル　ホース内径25.4用", "size": "25Ａ", "mode": "piece", "price": 1190, "packLen": 0, "qty": 0}, {"id": 49, "cat": "ホースニップル", "name": "ナット付ホースニップル", "size": "25A", "mode": "piece", "price": 1990, "packLen": 0, "qty": 0}, {"id": 50, "cat": "フレキニップル", "name": "フレキ用ニップル[配管/ポンプ/空圧・油圧編]", "size": "20A", "mode": "piece", "price": 339, "packLen": 0, "qty": 0}, {"id": 51, "cat": "フレキニップル", "name": "フレキニップル25A", "size": "25A", "mode": "piece", "price": 1490, "packLen": 0, "qty": 0}, {"id": 52, "cat": "フレキニップル", "name": "異径フレキニップル　20A側平行ねじ", "size": "20A×13A", "mode": "piece", "price": 560, "packLen": 0, "qty": 0}, {"id": 53, "cat": "フレキニップル", "name": "異径フレキニップル　20A側平行ねじ", "size": "25Ａ-20Ａ", "mode": "piece", "price": 1190, "packLen": 0, "qty": 0}, {"id": 54, "cat": "固定足・バンド", "name": "鋼管支持金具　調整式２０Ａ用", "size": "20Ａ", "mode": "piece", "price": 739, "packLen": 0, "qty": 0}, {"id": 55, "cat": "固定足・バンド", "name": "蝶番式立バンド", "size": "20A", "mode": "piece", "price": 139, "packLen": 0, "qty": 0}, {"id": 56, "cat": "固定足・バンド", "name": "T足　　200ミリ", "size": "20Ａ", "mode": "piece", "price": 289, "packLen": 0, "qty": 0}, {"id": 57, "cat": "固定足・バンド", "name": "T足　　150ミリ", "size": "20Ａ", "mode": "piece", "price": 219, "packLen": 0, "qty": 0}, {"id": 58, "cat": "固定足・バンド", "name": "T足　　50ミリ", "size": "20Ａ", "mode": "piece", "price": 98, "packLen": 0, "qty": 0}, {"id": 59, "cat": "固定足・バンド", "name": "T足　　80ミリ", "size": "80×25", "mode": "piece", "price": 118, "packLen": 0, "qty": 0}, {"id": 60, "cat": "固定足・バンド", "name": "ステンレスサドルバンド　27ミリ", "size": "6分用", "mode": "piece", "price": 57, "packLen": 0, "qty": 0}, {"id": 61, "cat": "固定足・バンド", "name": "ステンレスサドルバンド　34ミリ", "size": "8分用", "mode": "piece", "price": 80, "packLen": 0, "qty": 0}, {"id": 62, "cat": "基本水栓・継手", "name": "２口水栓　基本セット　カチット、普通", "size": "13Ａ", "mode": "piece", "price": 7990, "packLen": 0, "qty": 0}, {"id": 63, "cat": "基本水栓・継手", "name": "水栓継手", "size": "１３×13", "mode": "piece", "price": 1890, "packLen": 0, "qty": 0}, {"id": 64, "cat": "電気部材", "name": "防雨型延長コード3つ口　3芯　１０メートル", "size": "１０メートル", "mode": "length", "price": 4490, "packLen": 10, "qty": 0}, {"id": 65, "cat": "電気部材", "name": "防雨形延長コード　1口　3芯　5メートル", "size": "5Ｍ", "mode": "length", "price": 2290, "packLen": 5, "qty": 0}, {"id": 66, "cat": "電気部材", "name": "プラグカッパー2　　２口コンセント用防雨キャップ", "size": "1", "mode": "piece", "price": 459, "packLen": 0, "qty": 0}, {"id": 67, "cat": "電気部材", "name": "変換アダプター　3Ｐ～2Ｐ　アース付き", "size": "1", "mode": "piece", "price": 289, "packLen": 0, "qty": 0}, {"id": 68, "cat": "電気部材", "name": "ミラフレキSS", "size": "50M", "mode": "length", "price": 5590, "packLen": 50, "qty": 0}, {"id": 69, "cat": "電気部材", "name": "フレキコネクタ", "size": "10個入り", "mode": "piece", "price": 879, "packLen": 0, "qty": 0}, {"id": 70, "cat": "電気部材", "name": "メーターパッキン", "size": "1個", "mode": "piece", "price": 31, "packLen": 0, "qty": 0}, {"id": 71, "cat": "電気部材", "name": "PC2005F(ギボシメス）", "size": "100個", "mode": "piece", "price": 3590, "packLen": 0, "qty": 0}, {"id": 72, "cat": "電気部材", "name": "PC2005M(ギボシオス）", "size": "100個", "mode": "piece", "price": 3590, "packLen": 0, "qty": 0}, {"id": 73, "cat": "電気部材", "name": "Y端子3ミリ", "size": "100個", "mode": "piece", "price": 589, "packLen": 0, "qty": 0}, {"id": 74, "cat": "電気部材", "name": "Y端子4ミリ", "size": "100個", "mode": "piece", "price": 659, "packLen": 0, "qty": 0}, {"id": 75, "cat": "電気部材", "name": "R2-4丸端子4ミリ", "size": "100個", "mode": "piece", "price": 639, "packLen": 0, "qty": 0}, {"id": 76, "cat": "電気部材", "name": "R2-5丸端子5ミリ", "size": "100個", "mode": "piece", "price": 639, "packLen": 0, "qty": 0}, {"id": 77, "cat": "電気部材", "name": "裸圧着スリーブR1.25", "size": "100個", "mode": "piece", "price": 549, "packLen": 0, "qty": 0}, {"id": 78, "cat": "電気部材", "name": "耐熱電線", "size": "100M", "mode": "length", "price": 2790, "packLen": 100, "qty": 0}, {"id": 79, "cat": "電気部材", "name": "収縮チューブ", "size": "1M", "mode": "length", "price": 77, "packLen": 1, "qty": 0}, {"id": 80, "cat": "電気部材", "name": "アース線", "size": "10M", "mode": "length", "price": 1290, "packLen": 10, "qty": 0}, {"id": 81, "cat": "電気部材", "name": "絶縁キャップ　(赤） 200V", "size": "100個", "mode": "piece", "price": 369, "packLen": 0, "qty": 0}, {"id": 82, "cat": "電気部材", "name": "絶縁キャップ　(白） 200V", "size": "100個", "mode": "piece", "price": 369, "packLen": 0, "qty": 0}, {"id": 83, "cat": "電気部材", "name": "絶縁キャップ　（黒）　200Ｖ", "size": "１００個", "mode": "piece", "price": 369, "packLen": 0, "qty": 0}, {"id": 84, "cat": "電気部材", "name": "絶縁キャップ　（緑）　200Ｖ", "size": "１００個", "mode": "piece", "price": 369, "packLen": 0, "qty": 0}, {"id": 85, "cat": "電気部材", "name": "ＶＣＴＦ　4×0.75ｍｍ　(３点フロート用)", "size": "100ｍ", "mode": "length", "price": 19900, "packLen": 100, "qty": 0}, {"id": 86, "cat": "電気部材", "name": "ＶＣＴＦ　2×0.75ｍｍ　(渇水フロート用)", "size": "100ｍ", "mode": "length", "price": 7598, "packLen": 100, "qty": 0}, {"id": 87, "cat": "その他", "name": "巻フレキパイプステンレス製[配管/ポンプ/空圧・油圧編]", "size": "20（10ｍ/巻）", "mode": "length", "price": 4990, "packLen": 10, "qty": 0}, {"id": 88, "cat": "その他", "name": "袋ナットパッキンセットフレキ用[配管/ポンプ/空圧・油圧編]", "size": "20A", "mode": "piece", "price": 189, "packLen": 0, "qty": 0}, {"id": 89, "cat": "その他", "name": "給水キャップ　13Ａ", "size": "13Ａ", "mode": "piece", "price": 259, "packLen": 0, "qty": 0}, {"id": 90, "cat": "その他", "name": "給水キャップ　20Ａ", "size": "20Ａ用", "mode": "piece", "price": 399, "packLen": 0, "qty": 0}, {"id": 91, "cat": "その他", "name": "ブレードホース　内径15外形22ミリ　１０メートル", "size": "1", "mode": "length", "price": 2790, "packLen": 10, "qty": 0}, {"id": 92, "cat": "その他", "name": "フレキ用ゴムパッキン　20Ａ　1袋５０枚", "size": "20Ａ用", "mode": "piece", "price": 579, "packLen": 0, "qty": 0}, {"id": 93, "cat": "その他", "name": "25Ａ　ゴムフレキパッキン　　（１枚）", "size": "25Ａ", "mode": "piece", "price": 48, "packLen": 0, "qty": 0}, {"id": 94, "cat": "その他", "name": "ゴム板　２０ｍｍ　100×100　（ＫＰ土台用）", "size": "20ｍｍ", "mode": "piece", "price": 539, "packLen": 0, "qty": 0}, {"id": 95, "cat": "その他", "name": "パテ200ｇ　アイボリー", "size": "200ｇ", "mode": "piece", "price": 119, "packLen": 0, "qty": 0}, {"id": 96, "cat": "その他", "name": "パテ　グレー（大）", "size": "1", "mode": "piece", "price": 499, "packLen": 0, "qty": 0}, {"id": 97, "cat": "その他", "name": "タイラップ200ミリ　4.8ミリ　100本", "size": "", "mode": "piece", "price": 519, "packLen": 0, "qty": 0}, {"id": 98, "cat": "その他", "name": "タイラップ380ミリ　7.5ミリ　100本", "size": "", "mode": "piece", "price": 1390, "packLen": 0, "qty": 0}, {"id": 99, "cat": "その他", "name": "タイラップ　白　３００ミリ　外用", "size": "1袋", "mode": "piece", "price": 1290, "packLen": 0, "qty": 0}, {"id": 100, "cat": "その他", "name": "座付きノンプラグビス　コンクリ用１箱", "size": "１箱１５０本", "mode": "piece", "price": 1390, "packLen": 0, "qty": 0}, {"id": 101, "cat": "その他", "name": "ステンレス　コンクリビス　4×25", "size": "200本", "mode": "piece", "price": 1198, "packLen": 0, "qty": 0}, {"id": 102, "cat": "その他", "name": "ステンレス　コンクリビス　4×32", "size": "170本", "mode": "piece", "price": 1198, "packLen": 0, "qty": 0}, {"id": 103, "cat": "その他", "name": "パッキン　13Ａ　（50枚入り）", "size": "13Ａ", "mode": "piece", "price": 469, "packLen": 0, "qty": 0}, {"id": 104, "cat": "その他", "name": "片ナットアダプター", "size": "20Ａ用", "mode": "piece", "price": 939, "packLen": 0, "qty": 0}, {"id": 105, "cat": "その他", "name": "裸圧着スリーブ　Ｅ小（2ｍｍ×2本用）20個入り", "size": "Ｅ小", "mode": "piece", "price": 119, "packLen": 0, "qty": 0}, {"id": 106, "cat": "その他", "name": "HI バルブソケット（インサート付き）", "size": "30A", "mode": "piece", "price": 969, "packLen": 0, "qty": 0}, {"id": 107, "cat": "その他", "name": "HI バルブソケット（インサート付き）", "size": "40A", "mode": "piece", "price": 1090, "packLen": 0, "qty": 0}, {"id": 108, "cat": "その他", "name": "HI エルボ", "size": "40A", "mode": "piece", "price": 209, "packLen": 0, "qty": 0}, {"id": 109, "cat": "その他", "name": "HI 異形チーズ", "size": "40A×25A", "mode": "piece", "price": 619, "packLen": 0, "qty": 0}, {"id": 110, "cat": "その他", "name": "異型チーズ", "size": "40A×20A", "mode": "piece", "price": 619, "packLen": 0, "qty": 0}, {"id": 111, "cat": "その他", "name": "異形ソケット", "size": "40A×25A", "mode": "piece", "price": 149, "packLen": 0, "qty": 0}, {"id": 112, "cat": "その他", "name": "水栓ソケット（インサート付き）", "size": "25A", "mode": "piece", "price": 729, "packLen": 0, "qty": 0}, {"id": 113, "cat": "その他", "name": "異型ソケット", "size": "40Ａ×25Ａ", "mode": "piece", "price": 179, "packLen": 0, "qty": 0}, {"id": 114, "cat": "その他", "name": "フロアーバンド", "size": "40A", "mode": "piece", "price": 459, "packLen": 0, "qty": 0}, {"id": 115, "cat": "その他", "name": "座付き水栓エルボ", "size": "13×13Ａ", "mode": "piece", "price": 1890, "packLen": 0, "qty": 0}, {"id": 116, "cat": "その他", "name": "フレキシブルメタルホース500ｍｍ", "size": "40A", "mode": "piece", "price": 5998, "packLen": 0, "qty": 0}, {"id": 117, "cat": "その他", "name": "黒　絶縁ビニールテープ", "size": "１０巻き", "mode": "piece", "price": 1698, "packLen": 0, "qty": 0}, {"id": 118, "cat": "その他", "name": "ＰＰサドルＶＰ用", "size": "40Ａ", "mode": "piece", "price": 199, "packLen": 0, "qty": 0}, {"id": 119, "cat": "その他", "name": "厚手ゴミ袋", "size": "10枚", "mode": "piece", "price": 399, "packLen": 0, "qty": 0}, {"id": 120, "cat": "その他", "name": "土嚢袋", "size": "５０枚", "mode": "piece", "price": 3198, "packLen": 0, "qty": 0}, {"id": 121, "cat": "その他", "name": "スイングチャッキバルブ", "size": "25A", "mode": "piece", "price": 7598, "packLen": 0, "qty": 0}, {"id": 122, "cat": "その他", "name": "キャンパス絹　黒", "size": "", "mode": "piece", "price": 200, "packLen": 0, "qty": 0}, {"id": 123, "cat": "その他", "name": "保温材　白20Ａ", "size": "", "mode": "piece", "price": 210, "packLen": 0, "qty": 0}, {"id": 124, "cat": "その他", "name": "保温材　白25Ａ", "size": "", "mode": "piece", "price": 260, "packLen": 0, "qty": 0}, {"id": 125, "cat": "その他", "name": "シールテープ　黒", "size": "", "mode": "piece", "price": 180, "packLen": 0, "qty": 0}, {"id": 126, "cat": "別注文", "name": "GH-EXCR-19　エクセルカラー19mm", "size": "1メートル", "mode": "length", "price": 650, "packLen": 1, "qty": 0}, {"id": 127, "cat": "別注文", "name": "GH-EXCR-25　エクセルカラー25mm", "size": "1メートル", "mode": "length", "price": 970, "packLen": 1, "qty": 0}, {"id": 128, "cat": "別注文", "name": "32イーデアルホースバンド（鉄）20-32mm用", "size": "", "mode": "piece", "price": 190, "packLen": 0, "qty": 0}, {"id": 129, "cat": "別注文", "name": "40イーデアルホースバンド（鉄）25-40mm用", "size": "", "mode": "piece", "price": 190, "packLen": 0, "qty": 0}, {"id": 130, "cat": "別注文", "name": "カムロック　アダプター　633-Ｆ　20Ａテーパーネジ　19ｍｍ用", "size": "20Ａ", "mode": "piece", "price": 1150, "packLen": 0, "qty": 0}, {"id": 131, "cat": "別注文", "name": "カムロック　シャンク　　633-Ｃ　ホースニップル付き　19ｍｍ用", "size": "20Ａ", "mode": "piece", "price": 1940, "packLen": 0, "qty": 0}];
+  const CAT_ORDER = ["HIVP", "鋼管", "バルブ", "ホースニップル", "フレキニップル", "固定足・バンド", "基本水栓・継手", "電気部材", "その他", "別注文"];
+  let nextId = materials.length + 1;
+  const QTY_MAX = 50;
+  let openCats = {};
+  let editingId = null;
+
+  const yen = n => "¥" + Math.round(n).toLocaleString("ja-JP");
+  const yenU = n => "¥" + (Math.round(n*10)/10).toLocaleString("ja-JP");  // 1m単価(小数1桁)
+  const esc = s => String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+  const unitOf  = m => (m.mode==='length' && m.packLen>0) ? m.price/m.packLen : m.price;
+  const amountOf = m => (m.mode==='length' && m.packLen>0) ? (m.price/m.packLen)*m.qty : m.price*m.qty;
+
+  const listEl = document.getElementById("list");
+  const searchEl = document.getElementById("search");
+  const usedOnlyEl = document.getElementById("usedOnly");
+
+  function render(){
+    const q = searchEl.value.trim().toLowerCase();
+    const usedOnly = usedOnlyEl.checked;
+    listEl.innerHTML = "";
+
+    const catsInData = [...new Set(materials.map(m => m.cat))];
+    const cats = [...CAT_ORDER.filter(c => catsInData.includes(c)),
+                  ...catsInData.filter(c => !CAT_ORDER.includes(c))];
+
+    let anyShown = false;
+    cats.forEach(cat => {
+      let group = materials.filter(m => m.cat === cat);
+      if(usedOnly) group = group.filter(m => m.qty > 0);
+      if(q) group = group.filter(m => (m.name + " " + m.size).toLowerCase().includes(q));
+      if(group.length === 0) return;
+      anyShown = true;
+
+      const usedCount = group.filter(m => m.qty > 0).length;
+      const catSum = group.reduce((s,m) => s + amountOf(m), 0);
+      const isOpen = (q || usedOnly) ? true : !!openCats[cat];
+      const catEl = document.createElement("div");
+      catEl.className = "cat" + (isOpen ? " open" : "");
+
+      let itemsHtml = "";
+      group.forEach(m => itemsHtml += itemHtml(m));
+
+      catEl.innerHTML = `
+        <button class="cat-head" data-cat="${esc(cat)}">
+          <span class="cat-name">${esc(cat)}</span>
+          <span class="cat-badge${usedCount>0?" show":""}">${usedCount}</span>
+          <span class="cat-sub">
+            <span class="cat-count">${group.length}点</span>
+            <span class="cat-sum${catSum===0?" zero":""}">${yen(catSum)}</span>
+            <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="#16323d" stroke-width="3"><path d="M6 9l6 6 6-6"/></svg>
+          </span>
+        </button>
+        <div class="cat-body">${itemsHtml}</div>`;
+      listEl.appendChild(catEl);
+    });
+
+    if(!anyShown) listEl.innerHTML = `<div class="no-result">該当する部材がないよ。<br>検索ワードを変えるか、下の「＋新しい部材を追加」で登録してね。</div>`;
+
+    bindEvents();
+    renderTotals();
+  }
+
+  function itemHtml(m){
+    const amount = amountOf(m);
+    const isLen = m.mode === 'length';
+    const metaParts = [];
+    if(m.size) metaParts.push(`<span class="size-tag">${esc(m.size)}</span>`);
+    if(isLen) metaParts.push(`<span class="len-chip">m単位</span>`);
+
+    let body;
+    if(isLen){
+      const u = unitOf(m);
+      let opts = "";  // 使用mは数値入力
+      body = `
+        <div class="len-row">
+          <div class="len-calc">購入 ${yen(m.price)} ÷ ${m.packLen||"?"}m <span class="um">＝ ${m.packLen>0?yenU(u):"—"}/m</span></div>
+          <div class="len-use">
+            <span class="lbl">使用</span>
+            <input type="number" class="use-m${m.qty>0?" active":""}" data-id="${m.id}" value="${m.qty||""}" placeholder="0" inputmode="decimal" min="0" step="0.1">
+            <span class="um-unit">m</span>
+            <span class="eq">=</span>
+            <span class="amount${amount===0?" zero":""}">${yen(amount)}</span>
+          </div>
+        </div>`;
+    }else{
+      let opts = "";
+      for(let i=0;i<=QTY_MAX;i++) opts += `<option value="${i}" ${i===m.qty?"selected":""}>${i}</option>`;
+      body = `
+        <div class="item-bottom">
+          <span class="price">${yen(m.price)}</span>
+          <span class="times">×</span>
+          <select class="qty${m.qty>0?" active":""}" data-id="${m.id}">${opts}</select>
+          <span class="eq">=</span>
+          <span class="amount${amount===0?" zero":""}">${yen(amount)}</span>
+        </div>`;
+    }
+
+    const panel = (editingId === m.id) ? editPanelHtml(m) : "";
+
+    return `
+      <div class="item${m.qty>0?" has-qty":""}${isLen?" is-length":""}">
+        <div class="item-top">
+          <div>
+            <div class="item-name">${esc(m.name)}</div>
+            ${metaParts.length?`<div class="item-meta">${metaParts.join("")}</div>`:""}
+          </div>
+          <div class="item-actions">
+            <button class="icon-btn edit" data-id="${m.id}" title="単価・数え方を編集">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+            </button>
+            <button class="icon-btn del" data-id="${m.id}" title="削除">×</button>
+          </div>
+        </div>
+        ${body}
+        ${panel}
+      </div>`;
+  }
+
+  function editPanelHtml(m){
+    const isLen = m.mode === 'length';
+    return `
+      <div class="edit-panel">
+        <div class="ep-modes">
+          <label class="ep-mode"><input type="radio" name="epmode-${m.id}" value="piece" ${!isLen?"checked":""}><span>個数</span></label>
+          <label class="ep-mode"><input type="radio" name="epmode-${m.id}" value="length" ${isLen?"checked":""}><span>メートル</span></label>
+        </div>
+        <div class="ep-fields">
+          <div class="ep-f ep-price-f">
+            <label id="eplbl-${m.id}">${isLen?"購入金額(円)":"単価(円)"}</label>
+            <input type="number" class="ep-price" id="epprice-${m.id}" value="${m.price}" inputmode="numeric" min="0">
+          </div>
+          <div class="ep-f ep-len-f" style="${isLen?"":"display:none;"}">
+            <label>購入長(m)</label>
+            <input type="number" class="ep-len" id="eplen-${m.id}" value="${m.packLen||""}" inputmode="decimal" min="0" step="0.1">
+          </div>
+        </div>
+        <div class="ep-hint" id="ephint-${m.id}"></div>
+        <div class="ep-actions">
+          <button class="ep-save" data-id="${m.id}">保存</button>
+          <button class="ep-cancel">キャンセル</button>
+        </div>
+      </div>`;
+  }
+
+  function bindEvents(){
+    listEl.querySelectorAll(".cat-head").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const c = btn.dataset.cat;
+        openCats[c] = !btn.parentElement.classList.contains("open");
+        render();
+      });
+    });
+    listEl.querySelectorAll("select.qty").forEach(sel => {
+      sel.addEventListener("change", e => {
+        const m = materials.find(x => x.id === Number(e.target.dataset.id));
+        if(m){ m.qty = Number(e.target.value); render(); }
+      });
+    });
+    listEl.querySelectorAll("input.use-m").forEach(inp => {
+      inp.addEventListener("change", e => {
+        const m = materials.find(x => x.id === Number(e.target.dataset.id));
+        if(m){ m.qty = Math.max(0, parseFloat(e.target.value) || 0); render(); }
+      });
+    });
+    listEl.querySelectorAll(".icon-btn.edit").forEach(btn => {
+      btn.addEventListener("click", () => { editingId = Number(btn.dataset.id); render(); });
+    });
+    listEl.querySelectorAll(".icon-btn.del").forEach(btn => {
+      btn.addEventListener("click", () => {
+        materials = materials.filter(x => x.id !== Number(btn.dataset.id));
+        if(editingId === Number(btn.dataset.id)) editingId = null;
+        render();
+      });
+    });
+    // 編集パネル: モード切替で入力欄の出し分け + ヒント更新
+    listEl.querySelectorAll(".edit-panel").forEach(panel => {
+      const id = editingId;
+      const lenF = panel.querySelector(".ep-len-f");
+      const lbl = panel.querySelector(".ep-f label");
+      const priceInp = panel.querySelector(".ep-price");
+      const lenInp = panel.querySelector(".ep-len");
+      const hint = panel.querySelector(".ep-hint");
+      const updateHint = () => {
+        const mode = panel.querySelector(`input[name="epmode-${id}"]:checked`).value;
+        if(mode==='length'){
+          const p = parseFloat(priceInp.value)||0, L = parseFloat(lenInp.value)||0;
+          hint.textContent = (p>0 && L>0) ? `→ 1mあたり ${yenU(p/L)}` : "購入金額と購入長を入れてね";
+        }else hint.textContent = "";
+      };
+      panel.querySelectorAll(`input[name="epmode-${id}"]`).forEach(r => {
+        r.addEventListener("change", () => {
+          const isLen = panel.querySelector(`input[name="epmode-${id}"]:checked`).value==='length';
+          lenF.style.display = isLen ? "" : "none";
+          lbl.textContent = isLen ? "購入金額(円)" : "単価(円)";
+          updateHint();
+        });
+      });
+      priceInp.addEventListener("input", updateHint);
+      lenInp.addEventListener("input", updateHint);
+      panel.querySelector(".ep-cancel").addEventListener("click", () => { editingId = null; render(); });
+      panel.querySelector(".ep-save").addEventListener("click", () => {
+        const m = materials.find(x => x.id === id);
+        if(!m) return;
+        const mode = panel.querySelector(`input[name="epmode-${id}"]:checked`).value;
+        const price = Math.max(0, parseFloat(priceInp.value) || 0);
+        m.price = price;
+        m.mode = mode;
+        if(mode==='length'){
+          const L = Math.max(0, parseFloat(lenInp.value) || 0);
+          m.packLen = L;
+        }
+        editingId = null;
+        render();
+      });
+      updateHint();
+    });
+  }
+
+  function renderTotals(){
+    const subtotal = materials.reduce((s,m) => s + amountOf(m), 0);
+    const rate = Number(document.getElementById("taxRate").value) || 0;
+    const tax = subtotal * rate / 100;
+    document.getElementById("subtotal").textContent = yen(subtotal);
+    document.getElementById("taxAmount").textContent = yen(tax);
+    document.getElementById("grandTotal").textContent = yen(subtotal + tax);
+    document.getElementById("usedPill").textContent = materials.filter(m => m.qty > 0).length + "点 使用中";
+  }
+
+  // ===== 集計コピー =====
+  document.getElementById("copyBtn").addEventListener("click", () => {
+    const used = materials.filter(m => m.qty > 0);
+    if(used.length === 0){ alert("まだ部材が選ばれてないよ"); return; }
+    const subtotal = used.reduce((s,m) => s + amountOf(m), 0);
+    const rate = Number(document.getElementById("taxRate").value) || 0;
+    const tax = Math.round(subtotal * rate / 100);
+    let lines = ["【HW部材集計】", ""];
+    let curCat = "";
+    [...used].sort((a,b) => CAT_ORDER.indexOf(a.cat) - CAT_ORDER.indexOf(b.cat)).forEach(m => {
+      if(m.cat !== curCat){ curCat = m.cat; lines.push("■" + curCat); }
+      const nm = m.name + (m.size ? "（"+m.size+"）" : "");
+      if(m.mode==='length') lines.push(`  ${nm}　${m.qty}m × ${yenU(unitOf(m))}/m = ${yen(amountOf(m))}`);
+      else lines.push(`  ${nm}　${yen(m.price)} × ${m.qty} = ${yen(amountOf(m))}`);
+    });
+    lines.push("", `小計　${yen(subtotal)}`, `消費税(${rate}%)　${yen(tax)}`, `総合計　${yen(subtotal + tax)}`);
+    const text = lines.join("\n");
+    const btn = document.getElementById("copyBtn");
+    const done = () => { btn.classList.add("done"); btn.lastChild.textContent="コピーしたよ"; setTimeout(()=>{btn.classList.remove("done");btn.lastChild.textContent="テキストでコピー";},1600); };
+    if(navigator.clipboard) navigator.clipboard.writeText(text).then(done).catch(()=>fallbackCopy(text,done));
+    else fallbackCopy(text, done);
+  });
+  function fallbackCopy(text, cb){
+    const ta = document.createElement("textarea");
+    ta.value = text; ta.style.position="fixed"; ta.style.opacity="0";
+    document.body.appendChild(ta); ta.select();
+    try{ document.execCommand("copy"); cb(); }catch(e){ alert("コピーできなかった…"); }
+    document.body.removeChild(ta);
+  }
+
+  // ===== すべて開く/閉じる =====
+  const expandBtn = document.getElementById("expandAll");
+  expandBtn.addEventListener("click", () => {
+    const all = [...new Set(materials.map(m=>m.cat))];
+    const allOpen = all.every(c => openCats[c]);
+    all.forEach(c => openCats[c] = !allOpen);
+    expandBtn.textContent = allOpen ? "すべて開く" : "すべて閉じる";
+    render();
+  });
+
+  // ===== 新規追加 =====
+  const addForm = document.getElementById("addForm");
+  const addBtn = document.getElementById("addBtn");
+  const newCatSel = document.getElementById("newCat");
+  CAT_ORDER.forEach(c => { const o=document.createElement("option"); o.value=c; o.textContent=c; newCatSel.appendChild(o); });
+  newCatSel.value = "その他";
+  // 新規フォームのモード切替
+  document.querySelectorAll('input[name="newMode"]').forEach(r => {
+    r.addEventListener("change", () => {
+      const isLen = document.querySelector('input[name="newMode"]:checked').value === 'length';
+      document.getElementById("newLenWrap").style.display = isLen ? "" : "none";
+      document.getElementById("newPriceLbl").textContent = isLen ? "購入金額(円)" : "単価(円)";
+    });
+  });
+  addBtn.addEventListener("click", () => { addForm.classList.add("open"); addBtn.style.display="none"; document.getElementById("newName").focus(); });
+  function closeForm(){
+    addForm.classList.remove("open"); addBtn.style.display="flex";
+    document.getElementById("formErr").classList.remove("show");
+    ["newName","newSize","newPrice","newLen"].forEach(id => document.getElementById(id).value="");
+    document.querySelector('input[name="newMode"][value="piece"]').checked = true;
+    document.getElementById("newLenWrap").style.display = "none";
+    document.getElementById("newPriceLbl").textContent = "単価(円)";
+  }
+  document.getElementById("cancelBtn").addEventListener("click", closeForm);
+  document.getElementById("saveBtn").addEventListener("click", () => {
+    const name = document.getElementById("newName").value.trim();
+    const priceRaw = document.getElementById("newPrice").value;
+    const price = Number(priceRaw);
+    const mode = document.querySelector('input[name="newMode"]:checked').value;
+    const packLen = mode==='length' ? Math.max(0, parseFloat(document.getElementById("newLen").value)||0) : 0;
+    if(!name || priceRaw==="" || !(price>=0) || (mode==='length' && !(packLen>0))){
+      document.getElementById("formErr").textContent = (mode==='length' && !(packLen>0)) ? "購入長(m)も入れてね" : "商品名と金額は必須だよ";
+      document.getElementById("formErr").classList.add("show"); return;
+    }
+    const cat = newCatSel.value;
+    materials.push({ id:nextId++, cat, name, size:document.getElementById("newSize").value.trim(), mode, price, packLen, qty:0 });
+    openCats[cat] = true;
+    closeForm(); render();
+  });
+
+  // ===== 印刷用集計表(マーフィード送付用) =====
+  function buildPrintView(){
+    const used = materials.filter(m => m.qty > 0);
+    const subtotal = used.reduce((s,m) => s + amountOf(m), 0);
+    const rate = Number(document.getElementById("taxRate").value) || 0;
+    const tax = Math.round(subtotal * rate / 100);
+    const grand = subtotal + tax;
+    const t = new Date();
+    const dstr = `${t.getFullYear()}年${t.getMonth()+1}月${t.getDate()}日`;
+
+    const catsInData = [...new Set(used.map(m => m.cat))];
+    const cats = [...CAT_ORDER.filter(c => catsInData.includes(c)),
+                  ...catsInData.filter(c => !CAT_ORDER.includes(c))];
+    let rows = "";
+    cats.forEach(cat => {
+      const g = used.filter(m => m.cat === cat);
+      if(!g.length) return;
+      rows += `<tr class="pv-catrow"><td colspan="4">${esc(cat)}</td></tr>`;
+      g.forEach(m => {
+        const isLen = m.mode === 'length';
+        const unitTxt = isLen ? `${yenU(unitOf(m))}/m` : yen(m.price);
+        const qtyTxt = isLen ? `${m.qty}m` : `${m.qty}`;
+        rows += `<tr>
+          <td class="pv-nm">${esc(m.name)}${m.size?` <span class="pv-sz">(${esc(m.size)})</span>`:""}</td>
+          <td class="pv-r">${unitTxt}</td>
+          <td class="pv-r">${qtyTxt}</td>
+          <td class="pv-r">${yen(amountOf(m))}</td>
+        </tr>`;
+      });
+    });
+
+    document.getElementById("pvPage").innerHTML = `
+      <div class="pv-head">
+        <div class="pv-title">HW工事　部材集計</div>
+        <div class="pv-date">発行日：${dstr}</div>
+      </div>
+      <div class="pv-parties">
+        <div class="pv-to">マーフィード　御中</div>
+        <div class="pv-from">株式会社AKC Total Support<br>千葉県袖ケ浦市</div>
+      </div>
+      <table class="pv-table">
+        <thead><tr><th>品名・規格</th><th class="r">単価</th><th class="r">数量</th><th class="r">金額</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div class="pv-totals">
+        <div class="pv-trow"><span>小計</span><span>${yen(subtotal)}</span></div>
+        <div class="pv-trow"><span>消費税(${rate}%)</span><span>${yen(tax)}</span></div>
+        <div class="pv-trow pv-grand"><span>総合計</span><span>${yen(grand)}</span></div>
+      </div>
+      <div class="pv-note">使用部材 ${used.length} 点</div>`;
+  }
+  document.getElementById("makePvBtn").addEventListener("click", () => {
+    if(materials.filter(m => m.qty > 0).length === 0){ alert("まだ部材が選ばれてないよ"); return; }
+    buildPrintView();
+    const pv = document.getElementById("printView");
+    pv.classList.add("open"); pv.scrollTop = 0;
+    document.body.style.overflow = "hidden";
+  });
+  document.getElementById("pvClose").addEventListener("click", () => {
+    document.getElementById("printView").classList.remove("open");
+    document.body.style.overflow = "";
+  });
+  document.getElementById("pvPrint").addEventListener("click", () => window.print());
+
+  document.getElementById("taxRate").addEventListener("input", renderTotals);
+  searchEl.addEventListener("input", render);
+  usedOnlyEl.addEventListener("change", render);
+
+  render();
+</script>
+</body>
+</html>
