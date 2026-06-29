@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  HW部材集計アプリ v0.5
+  HW部材集計アプリ v0.6
   HYPER Water 設置で使った部材と数量を集計するツール
   - 「HW工事材料.xlsx」の131部材を初期搭載(カテゴリ分け)
   - 個数部材: 単価 × 数量(プルダウン) = 金額
@@ -13,6 +13,7 @@
   作成: クロちゃん / COCOMI
   ※部材リスト(追加/編集/削除)・数量・税率はlocalStorageに自動保存され、再読込・アプリ終了でも消えないよ(v0.5)
   ※「数量を全部リセット」ボタン＋バックアップ書き出し/読み込み(Googleドライブ等に保管・端末間移動)に対応(v0.5)
+  ※「項目を削除」はチェックボックスで複数選択→確認してから消す安全方式に(v0.6・誤タップ防止で行の×は廃止)
   ※集計表の宛先・発行元(タイトル/宛先/会社名/住所)は localStorage に自動保存され、次回も残るよ(v0.4)
 -->
 <html lang="ja">
@@ -218,6 +219,14 @@
   .data-btn:hover{background:#eef4f5;}
   .data-btn:active{background:#e3f4f4;border-color:var(--accent);}
   #resetQtyBtn{color:var(--accent-deep);}
+  #deleteModeBtn{color:var(--danger);}
+  /* 削除モード v0.6 */
+  .delete-actions{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 4px;}
+  .del-go-btn{flex:1 1 auto;min-width:0;background:var(--danger);border:none;border-radius:10px;padding:11px 8px;font-size:13px;font-weight:700;color:#fff;cursor:pointer;font-family:inherit;white-space:nowrap;}
+  .del-go-btn:active{filter:brightness(.92);}
+  .item.del-mode{cursor:pointer;}
+  .del-row{display:flex;align-items:center;justify-content:flex-start;gap:12px;width:100%;cursor:pointer;margin-bottom:0;}
+  .del-check{width:22px;height:22px;flex:none;accent-color:var(--danger);cursor:pointer;}
 </style>
 </head>
 <body>
@@ -286,12 +295,18 @@
     </div>
   </div>
 
-  <!-- データ管理（数量リセット・バックアップ書き出し/読み込み） v0.5追加 -->
-  <div class="data-tools">
+  <!-- データ管理（削除・数量リセット・バックアップ書き出し/読み込み） v0.5/v0.6 -->
+  <div class="data-tools" id="dataTools">
+    <button class="data-btn" id="deleteModeBtn" type="button">🗑️ 項目を削除</button>
     <button class="data-btn" id="resetQtyBtn" type="button">🧹 数量を全部リセット</button>
     <button class="data-btn" id="exportBtn" type="button">⬇️ バックアップを書き出す</button>
     <button class="data-btn" id="importBtn" type="button">⬆️ 読み込む</button>
     <input type="file" id="importFile" accept="application/json,.json" style="display:none;">
+  </div>
+  <!-- 削除モード中だけ出るボタン行 v0.6追加 -->
+  <div class="delete-actions" id="deleteActions" style="display:none;">
+    <button class="del-go-btn" id="doDeleteBtn" type="button">🗑️ 選択した項目を削除 (0件)</button>
+    <button class="data-btn" id="cancelDeleteBtn" type="button">やめる</button>
   </div>
 
   <!-- 集計表の宛先・発行元 設定(印刷用・localStorageに自動保存) v0.4追加 -->
@@ -372,6 +387,33 @@
   const QTY_MAX = 50;
   let openCats = {};
   let editingId = null;
+  let deleteMode = false;          // v0.6: 削除モードON/OFF
+  const deleteChecked = new Set(); // v0.6: 削除モードで選択中の部材ID
+
+  // v0.6: 削除ボタンのラベル（選択件数）を更新
+  function updateDeleteLabel(){
+    const b = document.getElementById("doDeleteBtn");
+    if(b) b.textContent = `🗑️ 選択した項目を削除 (${deleteChecked.size}件)`;
+  }
+  // v0.6: 削除モードのON/OFFを切り替え（ボタン行の表示も入れ替えて再描画）
+  function setDeleteMode(on){
+    deleteMode = on;
+    deleteChecked.clear();
+    const dt = document.getElementById("dataTools");
+    const da = document.getElementById("deleteActions");
+    if(dt) dt.style.display = on ? "none" : "flex";
+    if(da) da.style.display = on ? "flex" : "none";
+    updateDeleteLabel();
+    render();
+  }
+  // v0.6: 選択した部材を、確認のうえ削除
+  function doDelete(){
+    if(deleteChecked.size === 0){ alert("削除する項目にチェックを入れてね"); return; }
+    if(!confirm(`本当に削除しますか？\n（選択した ${deleteChecked.size} 件を削除します）`)) return;
+    materials = materials.filter(m => !deleteChecked.has(m.id));
+    saveState();
+    setDeleteMode(false);   // モード解除（内部でrender）
+  }
 
   // ===== 作業状態の保存/復元（v0.5追加：カスタム部材＋単価編集＋数量＋税率を丸ごと自動保存） =====
   // 部材リスト・採番・税率を1キーにまとめて保存。入力のたびに自動セーブされ、再読込・アプリ終了でも消えない。
@@ -594,6 +636,19 @@
 
     const panel = (editingId === m.id) ? editPanelHtml(m) : "";
 
+    // v0.6: 削除モード中はチェックボックス付きの行（数量・編集は隠して削除に集中）
+    if(deleteMode){
+      return `
+      <div class="item del-mode${m.qty>0?" has-qty":""}">
+        <label class="item-top del-row">
+          <input type="checkbox" class="del-check" data-id="${m.id}" ${deleteChecked.has(m.id)?"checked":""}>
+          <div>
+            <div class="item-name">${esc(m.name)}</div>
+            ${metaParts.length?`<div class="item-meta">${metaParts.join("")}</div>`:""}
+          </div>
+        </label>
+      </div>`;
+    }
     return `
       <div class="item${m.qty>0?" has-qty":""}${isLen?" is-length":""}">
         <div class="item-top">
@@ -605,7 +660,6 @@
             <button class="icon-btn edit" data-id="${m.id}" title="単価・数え方を編集">
               <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
             </button>
-            <button class="icon-btn del" data-id="${m.id}" title="削除">×</button>
           </div>
         </div>
         ${body}
@@ -662,12 +716,12 @@
     listEl.querySelectorAll(".icon-btn.edit").forEach(btn => {
       btn.addEventListener("click", () => { editingId = Number(btn.dataset.id); render(); });
     });
-    listEl.querySelectorAll(".icon-btn.del").forEach(btn => {
-      btn.addEventListener("click", () => {
-        materials = materials.filter(x => x.id !== Number(btn.dataset.id));
-        if(editingId === Number(btn.dataset.id)) editingId = null;
-        saveState();
-        render();
+    // v0.6: 削除モードのチェックボックス（チェックで選択、件数ラベルだけ更新＝重い再描画なし）
+    listEl.querySelectorAll("input.del-check").forEach(chk => {
+      chk.addEventListener("change", e => {
+        const id = Number(e.target.dataset.id);
+        if(e.target.checked) deleteChecked.add(id); else deleteChecked.delete(id);
+        updateDeleteLabel();
       });
     });
     // 編集パネル: モード切替で入力欄の出し分け + ヒント更新
@@ -906,6 +960,10 @@
     if(e.target.files && e.target.files[0]) importBackup(e.target.files[0]);
     e.target.value = "";  // 同じファイルを連続で選べるようにリセット
   });
+  // ===== 削除モードのボタン（v0.6追加） =====
+  document.getElementById("deleteModeBtn").addEventListener("click", () => setDeleteMode(true));
+  document.getElementById("cancelDeleteBtn").addEventListener("click", () => setDeleteMode(false));
+  document.getElementById("doDeleteBtn").addEventListener("click", doDelete);
 
   loadState();   // v0.5: 保存済みの作業状態（部材・数量・税率）を復元してから描画
   render();
