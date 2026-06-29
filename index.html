@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<!-- HW部材集計アプリ 入口リダイレクト（v0.5 Pages化 / 2026-06-29）
+     akiyamanx.github.io/hw-parts-calculator/ を開くと、本体 hw-parts-calculator.html へ自動転送する案内ページ。
+     目的：永続URL（GitHub Pages・同一オリジン akiyamanx.github.io）を先に確定し、
+           この後に作る保存機能（localStorage）のデータが消えないようにするため。
+     補足：localStorageはパスではなくオリジン単位で共有されるので、本体がどのパスにあっても保存は共有される。 -->
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HW部材集計アプリ</title>
+  <link rel="canonical" href="./hw-parts-calculator.html">
+  <!-- JS無効でも転送できるようにmeta refreshを保険で入れる -->
+  <meta http-equiv="refresh" content="0; url=./hw-parts-calculator.html">
+  <script>
+    // JSが有効なら即時転送（検索文字列とハッシュも引き継ぐ。履歴は汚さないようreplaceを使う）
+    location.replace('./hw-parts-calculator.html' + location.search + location.hash);
+  </script>
+</head>
+<body style="font-family: system-ui, sans-serif; padding: 24px; text-align: center; line-height: 1.8;">
+  <p>読み込み中です…</p>
+  <p><a href="./hw-parts-calculator.html">▶ HW部材集計アプリを開く</a></p>
+</body>
+</html>
