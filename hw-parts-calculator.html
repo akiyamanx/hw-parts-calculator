@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  HW部材集計アプリ v0.4
+  HW部材集計アプリ v0.5
   HYPER Water 設置で使った部材と数量を集計するツール
   - 「HW工事材料.xlsx」の131部材を初期搭載(カテゴリ分け)
   - 個数部材: 単価 × 数量(プルダウン) = 金額
@@ -11,7 +11,8 @@
   - 印刷用集計表(マーフィード送付用)をワンタップ表示 → リコー等でPDF化
   - 集計表の宛先・発行元(タイトル/宛先/会社名/住所)を画面から編集 → localStorage保存(v0.4・TODO3)
   作成: クロちゃん / COCOMI
-  ※部材の数量・税率は再読込で消えるよ(localStorage保存は今後の課題=TODO1)
+  ※部材リスト(追加/編集/削除)・数量・税率はlocalStorageに自動保存され、再読込・アプリ終了でも消えないよ(v0.5)
+  ※「数量を全部リセット」ボタン＋バックアップ書き出し/読み込み(Googleドライブ等に保管・端末間移動)に対応(v0.5)
   ※集計表の宛先・発行元(タイトル/宛先/会社名/住所)は localStorage に自動保存され、次回も残るよ(v0.4)
 -->
 <html lang="ja">
@@ -211,6 +212,12 @@
     .pv-page{margin:0 !important;box-shadow:none !important;max-width:none !important;padding:0 !important;}
     @page{margin:14mm;}
   }
+  /* データ管理ツール（数量リセット・バックアップ） v0.5追加 */
+  .data-tools{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 4px;}
+  .data-btn{flex:1 1 auto;min-width:0;background:var(--surface);border:1.5px solid var(--line);border-radius:10px;padding:11px 8px;font-size:13px;font-weight:700;color:var(--ink);cursor:pointer;font-family:inherit;white-space:nowrap;transition:background .15s,border-color .15s;}
+  .data-btn:hover{background:#eef4f5;}
+  .data-btn:active{background:#e3f4f4;border-color:var(--accent);}
+  #resetQtyBtn{color:var(--accent-deep);}
 </style>
 </head>
 <body>
@@ -277,6 +284,14 @@
       <button class="btn-primary" id="saveBtn">追加する</button>
       <button class="btn-ghost" id="cancelBtn">やめる</button>
     </div>
+  </div>
+
+  <!-- データ管理（数量リセット・バックアップ書き出し/読み込み） v0.5追加 -->
+  <div class="data-tools">
+    <button class="data-btn" id="resetQtyBtn" type="button">🧹 数量を全部リセット</button>
+    <button class="data-btn" id="exportBtn" type="button">⬇️ バックアップを書き出す</button>
+    <button class="data-btn" id="importBtn" type="button">⬆️ 読み込む</button>
+    <input type="file" id="importFile" accept="application/json,.json" style="display:none;">
   </div>
 
   <!-- 集計表の宛先・発行元 設定(印刷用・localStorageに自動保存) v0.4追加 -->
@@ -357,6 +372,87 @@
   const QTY_MAX = 50;
   let openCats = {};
   let editingId = null;
+
+  // ===== 作業状態の保存/復元（v0.5追加：カスタム部材＋単価編集＋数量＋税率を丸ごと自動保存） =====
+  // 部材リスト・採番・税率を1キーにまとめて保存。入力のたびに自動セーブされ、再読込・アプリ終了でも消えない。
+  const WORK_KEY = "hwParts.workState.v1";
+  // 現在の作業状態を1つのオブジェクトにまとめる
+  function collectState(){
+    return {
+      v: 1,
+      savedAt: new Date().toISOString(),
+      taxRate: Number(document.getElementById("taxRate").value) || 0,
+      nextId: nextId,
+      materials: materials
+    };
+  }
+  // localStorageへ保存（プライベートモード等で失敗しても画面動作は継続）
+  function saveState(){
+    try{ localStorage.setItem(WORK_KEY, JSON.stringify(collectState())); }
+    catch(e){ /* 保存不可でも無視して続行 */ }
+  }
+  // localStorageから復元（無ければ初期データのまま。壊れていても初期データで動く）
+  function loadState(){
+    try{
+      const raw = localStorage.getItem(WORK_KEY);
+      if(!raw) return;
+      const s = JSON.parse(raw);
+      if(s && Array.isArray(s.materials) && s.materials.length){
+        materials = s.materials;
+        // 採番は「保存値」と「現部材の最大ID+1」の大きい方に補正（ID重複を防ぐ）
+        const maxId = materials.reduce((mx,m) => Math.max(mx, m.id||0), 0);
+        nextId = Math.max(Number(s.nextId)||0, maxId + 1);
+        if(typeof s.taxRate === "number"){
+          const t = document.getElementById("taxRate");
+          if(t) t.value = s.taxRate;
+        }
+      }
+    }catch(e){ /* 破損 → 初期データで動く */ }
+  }
+  // 数量だけ全部0に（単価の編集・追加した部材はそのまま残す）。新しい案件用。
+  function resetQuantities(){
+    if(!confirm("すべての数量を0にリセットします。\n（単価の編集や、追加した部材はそのまま残ります）\n\nよろしいですか？")) return;
+    materials.forEach(m => m.qty = 0);
+    saveState();
+    render();
+  }
+  // バックアップを書き出す（部材リスト＋数量＋税率を1ファイルに）。Googleドライブ等に保管・端末間移動できる。
+  function exportBackup(){
+    try{
+      const data = JSON.stringify(collectState(), null, 2);
+      const blob = new Blob([data], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const d = new Date();
+      const p = n => String(n).padStart(2, "0");
+      const stamp = `${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}`;
+      const a = document.createElement("a");
+      a.href = url; a.download = `hw-parts-backup_${stamp}.json`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }catch(e){ alert("書き出しに失敗しました：" + e.message); }
+  }
+  // バックアップを読み込む（ファイル選択 → 確認 → 復元）
+  function importBackup(file){
+    const reader = new FileReader();
+    reader.onload = e => {
+      try{
+        const s = JSON.parse(e.target.result);
+        if(!s || !Array.isArray(s.materials) || !s.materials.length) throw new Error("部材データが見つかりません");
+        if(!confirm(`このバックアップを読み込むと、今の内容は置き換わります。\n（部材 ${s.materials.length} 件）\n\nよろしいですか？`)) return;
+        materials = s.materials;
+        const maxId = materials.reduce((mx,m) => Math.max(mx, m.id||0), 0);
+        nextId = Math.max(Number(s.nextId)||0, maxId + 1);
+        if(typeof s.taxRate === "number"){
+          const t = document.getElementById("taxRate");
+          if(t) t.value = s.taxRate;
+        }
+        saveState();
+        render();
+        alert("読み込みました！");
+      }catch(err){ alert("読み込めませんでした：" + err.message); }
+    };
+    reader.readAsText(file);
+  }
 
   const yen = n => "¥" + Math.round(n).toLocaleString("ja-JP");
   const yenU = n => "¥" + (Math.round(n*10)/10).toLocaleString("ja-JP");  // 1m単価(小数1桁)
@@ -554,13 +650,13 @@
     listEl.querySelectorAll("select.qty").forEach(sel => {
       sel.addEventListener("change", e => {
         const m = materials.find(x => x.id === Number(e.target.dataset.id));
-        if(m){ m.qty = Number(e.target.value); render(); }
+        if(m){ m.qty = Number(e.target.value); saveState(); render(); }
       });
     });
     listEl.querySelectorAll("input.use-m").forEach(inp => {
       inp.addEventListener("change", e => {
         const m = materials.find(x => x.id === Number(e.target.dataset.id));
-        if(m){ m.qty = Math.max(0, parseFloat(e.target.value) || 0); render(); }
+        if(m){ m.qty = Math.max(0, parseFloat(e.target.value) || 0); saveState(); render(); }
       });
     });
     listEl.querySelectorAll(".icon-btn.edit").forEach(btn => {
@@ -570,6 +666,7 @@
       btn.addEventListener("click", () => {
         materials = materials.filter(x => x.id !== Number(btn.dataset.id));
         if(editingId === Number(btn.dataset.id)) editingId = null;
+        saveState();
         render();
       });
     });
@@ -611,6 +708,7 @@
           m.packLen = L;
         }
         editingId = null;
+        saveState();
         render();
       });
       updateHint();
@@ -704,6 +802,7 @@
     const cat = newCatSel.value;
     materials.push({ id:nextId++, cat, name, size:document.getElementById("newSize").value.trim(), mode, price, packLen, qty:0 });
     openCats[cat] = true;
+    saveState();
     closeForm(); render();
   });
 
@@ -771,7 +870,7 @@
   });
   document.getElementById("pvPrint").addEventListener("click", () => window.print());
 
-  document.getElementById("taxRate").addEventListener("input", renderTotals);
+  document.getElementById("taxRate").addEventListener("input", () => { renderTotals(); saveState(); });
   searchEl.addEventListener("input", render);
   usedOnlyEl.addEventListener("change", render);
 
@@ -799,6 +898,16 @@
     document.getElementById("ppTo").focus();
   });
 
+  // ===== データ管理ボタンのイベント（v0.5追加） =====
+  document.getElementById("resetQtyBtn").addEventListener("click", resetQuantities);
+  document.getElementById("exportBtn").addEventListener("click", exportBackup);
+  document.getElementById("importBtn").addEventListener("click", () => document.getElementById("importFile").click());
+  document.getElementById("importFile").addEventListener("change", e => {
+    if(e.target.files && e.target.files[0]) importBackup(e.target.files[0]);
+    e.target.value = "";  // 同じファイルを連続で選べるようにリセット
+  });
+
+  loadState();   // v0.5: 保存済みの作業状態（部材・数量・税率）を復元してから描画
   render();
 </script>
 </body>
