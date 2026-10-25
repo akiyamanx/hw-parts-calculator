@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  HW部材集計アプリ v0.7 (価格更新 2026-10-25)
+  HW部材集計アプリ v0.9 (別名・購入先・入出庫ファイル取り込み 2026-10-26)
   HYPER Water 設置で使った部材と数量を集計するツール
   - 「HW工事材料.xlsx」の131部材を初期搭載(カテゴリ分け)
   - 個数部材: 単価 × 数量(プルダウン) = 金額
@@ -15,6 +15,8 @@
   ※「数量を全部リセット」ボタン＋バックアップ書き出し/読み込み(Googleドライブ等に保管・端末間移動)に対応(v0.5)
   ※「項目を削除」はチェックボックスで複数選択→確認してから消す安全方式に(v0.6・誤タップ防止で行の×は廃止)
   ※集計表の宛先・発行元(タイトル/宛先/会社名/住所)は localStorage に自動保存され、次回も残るよ(v0.4)
+  ※v0.8: 在庫タブ(在庫数・発注点・棚卸し・足りないもの・発注リスト・履歴)／使った分を在庫から引く／削除は名前入り確認+元に戻す／単価の行内編集(●=手で変更)／重複をまとめる／価格の基準日表示。保存形式は v:2(旧v:1は自動移行)
+  ※v0.9: 別名(検索/名前合わせ)・購入先メモ・「ファイルを取り込む(入出庫)」(hw-parts-ops v1 のJSON。プレビュー→OK→8秒取り消し・二重取り込み防止)。保存形式 v:2→v:3(自動移行)。
 -->
 <html lang="ja">
 <head>
@@ -227,6 +229,225 @@
   .item.del-mode{cursor:pointer;}
   .del-row{display:flex;align-items:center;justify-content:flex-start;gap:12px;width:100%;cursor:pointer;margin-bottom:0;}
   .del-check{width:22px;height:22px;flex:none;accent-color:var(--danger);cursor:pointer;}
+  /* ===== v0.8 追加 ===== */
+  :root{--warn:#d9822b;--warn-bg:#fff3e6;}
+  .price-date{margin-top:3px;padding-left:32px;font-size:11px;color:var(--ink-soft);font-weight:500;opacity:.85;}
+  .viewbar{position:sticky;top:0;z-index:25;background:var(--bg);padding:6px 0 4px;}
+  .seg{display:flex;background:#d9e4e8;border-radius:12px;padding:3px;gap:3px;}
+  .seg button{flex:1;border:none;background:transparent;border-radius:10px;padding:10px 6px;font-size:14.5px;font-weight:800;color:var(--ink-soft);font-family:inherit;cursor:pointer;}
+  .seg button.on{background:var(--surface);color:var(--accent-deep);box-shadow:0 1px 3px rgba(13,58,68,.15);}
+  .toolbar{top:50px;}
+  body.v-stock #viewCollect{display:none;}
+  body:not(.v-stock) #viewStock{display:none;}
+  body.v-stock .totalbar{display:none;}
+  body.v-stock .wrap{padding-bottom:90px;}
+  body.del-on .totalbar{display:none;}
+  body.del-on .wrap{padding-bottom:110px;}
+  body.del-on .viewbar{display:none;}
+  body.del-on .toolbar{top:0;}
+  body.del-on .add-btn,body.del-on .pp-section{display:none;}
+
+  /* 単価の行内編集 */
+  .price-btn{display:inline-flex;align-items:center;gap:3px;background:#f4f8f9;border:1px dashed #b9cdd3;border-radius:8px;padding:5px 8px;font-size:13.5px;font-weight:700;color:var(--ink-soft);font-family:inherit;font-variant-numeric:tabular-nums;cursor:pointer;min-height:32px;}
+  .price-btn:active{background:#e3f4f4;}
+  .price-btn svg{width:11px;height:11px;opacity:.55;flex:none;}
+  .pe-dot{font-style:normal;color:var(--warn);font-size:9px;line-height:1;}
+  .pe-row{margin-top:9px;background:#f7fafb;border:1.5px solid var(--accent);border-radius:10px;padding:10px;}
+  .pe-row label{display:block;font-size:11px;font-weight:600;color:var(--ink-soft);margin-bottom:4px;}
+  .pe-line{display:flex;gap:7px;align-items:center;}
+  .pe-line input{flex:1;min-width:0;border:1.5px solid var(--line);border-radius:8px;padding:10px;font-size:16px;font-family:inherit;color:var(--ink);font-variant-numeric:tabular-nums;}
+  .pe-line input:focus{outline:none;border-color:var(--accent);}
+  .pe-line button{flex:none;border:none;border-radius:8px;padding:11px 13px;font-size:13.5px;font-weight:700;font-family:inherit;cursor:pointer;}
+  .pe-ok{background:var(--accent);color:#fff;}
+  .pe-no{background:#fff;color:var(--ink-soft);border:1.5px solid var(--line) !important;}
+  .pe-err{color:var(--danger);font-size:12px;margin-top:5px;min-height:0;}
+  .pe-hint{font-size:11px;color:var(--ink-soft);margin-top:5px;}
+  .stk-chip{background:#eef3f4;color:var(--ink-soft);font-weight:700;border-radius:5px;padding:1px 6px;font-size:10.5px;}
+  .stk-chip.low{background:var(--warn-bg);color:var(--warn);}
+  .use-chip{background:#e3f4f4;color:var(--accent-deep);font-weight:700;border-radius:5px;padding:1px 6px;font-size:10.5px;}
+
+  /* 削除モード強化 */
+  .del-banner{background:#fbeceb;color:var(--danger);border-radius:11px;padding:10px 12px;font-size:12.5px;font-weight:700;margin-bottom:9px;line-height:1.5;}
+  .item.del-mode.sel{background:#fbeceb;border-radius:9px;outline:1.5px solid var(--danger);}
+  .delete-actions{position:fixed;left:0;right:0;bottom:0;z-index:40;margin:0;background:var(--surface);padding:10px 14px calc(10px + env(safe-area-inset-bottom));box-shadow:0 -3px 16px rgba(13,58,68,.18);}
+  .delete-actions .del-go-btn{padding:14px 8px;font-size:14px;}
+  .delete-actions .data-btn{flex:0 0 auto;padding:14px 16px;}
+
+  /* 使った分を在庫から引く(合計バー内) */
+  .tb-meta{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+  .deduct-btn{background:#fff3e6;color:#a85a14;border:1.5px solid #f0d3b3;border-radius:9px;padding:6px 10px;font-size:12px;font-weight:800;font-family:inherit;cursor:pointer;}
+  .deduct-btn:active{background:#fbe5cc;}
+
+  /* 部品行のボタン類 */
+  .btn-row{display:flex;gap:8px;flex-wrap:wrap;}
+  .st-sum{background:var(--surface);border-radius:13px;box-shadow:var(--shadow);padding:12px 14px;margin:6px 0 9px;font-size:13px;font-weight:700;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;}
+  .st-sum .ng{color:var(--warn);}
+  .st-actions{display:flex;gap:8px;margin-bottom:6px;}
+  .st-btn{flex:1;min-width:0;background:var(--surface);border:1.5px solid var(--line);border-radius:11px;padding:13px 4px;font-size:13px;font-weight:800;color:var(--ink);font-family:inherit;cursor:pointer;}
+  .st-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;flex:1.5;}
+  .st-btn:active{filter:brightness(.95);}
+  .st-undo{background:var(--warn-bg);border-radius:10px;padding:8px 12px;font-size:12px;font-weight:700;color:#a85a14;display:flex;align-items:center;justify-content:space-between;gap:8px;margin:6px 0;}
+  .st-undo button{background:#fff;border:1.5px solid #f0d3b3;border-radius:8px;padding:7px 10px;font-size:12px;font-weight:800;color:#a85a14;font-family:inherit;cursor:pointer;flex:none;}
+  .chips{display:flex;gap:7px;margin-top:9px;overflow-x:auto;padding-bottom:2px;}
+  .chip{flex:none;border:1.5px solid var(--line);background:var(--surface);border-radius:20px;padding:7px 13px;font-size:12.5px;font-weight:700;color:var(--ink-soft);font-family:inherit;cursor:pointer;white-space:nowrap;}
+  .chip.on{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .chip.warn.on{background:var(--warn);border-color:var(--warn);}
+  .srow{padding:11px 11px;border-top:1px solid var(--line);}
+  .srow:first-child{border-top:none;}
+  .srow.short{background:var(--warn-bg);border-radius:9px;border-left:4px solid var(--warn);}
+  .srow-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px;}
+  .srow-name{font-size:14.5px;font-weight:700;line-height:1.3;word-break:break-word;min-width:0;}
+  .srow .un{color:var(--warn);font-weight:700;}
+  .hist-btn{flex:none;background:#eef3f4;color:var(--ink-soft);border:none;border-radius:7px;padding:6px 9px;font-size:11.5px;font-weight:700;font-family:inherit;cursor:pointer;}
+  .srow-ctl{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+  .srow-ctl .lbl{font-size:12px;color:var(--ink-soft);font-weight:700;}
+  .srow-ctl .lbl.r{margin-left:6px;}
+  .stp{width:42px;height:42px;border-radius:10px;border:1.5px solid var(--line);background:#f1f6f7;color:var(--accent-deep);font-size:22px;font-weight:800;font-family:inherit;cursor:pointer;line-height:1;flex:none;}
+  .stp:active{background:#e3f4f4;border-color:var(--accent);}
+  .stk-in,.ro-in{border:1.5px solid var(--line);border-radius:9px;padding:9px 4px;font-size:16px;font-weight:700;text-align:center;font-family:inherit;color:var(--ink);font-variant-numeric:tabular-nums;}
+  .stk-in{width:62px;}
+  .ro-in{width:54px;font-weight:600;}
+  .stk-in:focus,.ro-in:focus{outline:none;border-color:var(--accent);}
+  .short-note{margin-top:7px;font-size:12px;font-weight:800;color:var(--warn);}
+
+  /* 全画面シート・ダイアログ・トースト */
+  .sheet,.cv{display:none;position:fixed;inset:0;background:var(--bg);overflow:auto;-webkit-overflow-scrolling:touch;}
+  .cv{z-index:110;}
+  .sheet{z-index:120;}
+  .sheet.open,.cv.open{display:block;}
+  .sheet-bar{position:sticky;top:0;z-index:2;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;background:#fff;box-shadow:0 1px 6px rgba(0,0,0,.12);}
+  .sheet-title{font-size:15px;font-weight:800;min-width:0;}
+  .sheet-bar button,.cv-close{flex:none;border:none;background:#eef0f1;color:var(--ink-soft);border-radius:9px;padding:10px 13px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;}
+  .sheet-body{max-width:600px;margin:0 auto;padding:12px 12px 40px;}
+  .sh-hint{font-size:12px;color:var(--ink-soft);line-height:1.6;margin-bottom:11px;}
+  .card{background:var(--surface);border-radius:13px;box-shadow:var(--shadow);padding:13px;margin-bottom:11px;}
+  .card h4{font-size:13px;font-weight:800;margin-bottom:8px;}
+  .tag{display:inline-block;border-radius:5px;padding:1px 7px;font-size:10.5px;font-weight:800;margin-right:4px;}
+  .tag.auto{background:#e3f4f4;color:var(--accent-deep);}
+  .tag.maybe{background:var(--warn-bg);color:var(--warn);}
+  .mrow{display:flex;gap:10px;align-items:flex-start;padding:10px 6px;border-top:1px solid var(--line);cursor:pointer;}
+  .mrow:first-of-type{border-top:none;}
+  .mrow input{width:22px;height:22px;flex:none;accent-color:var(--accent);margin-top:2px;}
+  .mrow .mi{min-width:0;font-size:13.5px;font-weight:700;word-break:break-word;}
+  .mrow .ms{font-size:11.5px;color:var(--ink-soft);font-weight:500;margin-top:2px;}
+  .mrow.keep{background:#f3fbfb;border-radius:9px;}
+  .pairpick .field{margin-bottom:8px;}
+  .pairpick select{width:100%;}
+  .btn-wide{width:100%;border:none;border-radius:10px;padding:13px;font-size:14px;font-weight:800;font-family:inherit;cursor:pointer;margin-top:9px;}
+  .btn-wide.pri{background:var(--accent);color:#fff;}
+  .btn-wide.sub{background:#eef3f4;color:var(--ink-soft);}
+  .btn-wide.dng{background:var(--danger);color:#fff;}
+  .btn-wide:disabled{opacity:.45;}
+  .btn-pair{display:flex;gap:8px;}
+  .btn-pair .btn-wide{margin-top:9px;}
+  .dlg{display:none;position:fixed;inset:0;z-index:130;background:rgba(13,40,48,.5);align-items:center;justify-content:center;padding:18px;}
+  .dlg.open{display:flex;}
+  .dlg-box{background:#fff;border-radius:16px;width:100%;max-width:380px;max-height:86vh;overflow:auto;padding:18px 16px 14px;box-shadow:0 10px 40px rgba(0,0,0,.3);}
+  .dlg-title{font-size:15.5px;font-weight:800;margin-bottom:9px;}
+  .dlg-body{font-size:13.5px;line-height:1.65;word-break:break-word;}
+  .dlg-body .nm{font-weight:800;}
+  .dlg-body ul{margin:8px 0 0 18px;}
+  .dlg-warn{margin-top:9px;background:var(--warn-bg);color:#a85a14;border-radius:9px;padding:8px 10px;font-size:12.5px;font-weight:700;}
+  .dlg-btns{display:flex;gap:9px;margin-top:15px;}
+  .dlg-btns button{flex:1;border:none;border-radius:10px;padding:13px 6px;font-size:14px;font-weight:800;font-family:inherit;cursor:pointer;}
+  .dlg-btns .b-ghost{background:#eef3f4;color:var(--ink-soft);}
+  .dlg-btns .b-pri{background:var(--accent);color:#fff;}
+  .dlg-btns .b-dng{background:var(--danger);color:#fff;}
+  .utoast{display:none;position:fixed;left:50%;transform:translateX(-50%);max-width:94vw;width:max-content;z-index:140;background:rgba(13,58,68,.96);color:#fff;border-radius:12px;padding:8px 8px 8px 14px;font-size:13px;align-items:center;gap:10px;box-shadow:0 4px 16px rgba(0,0,0,.3);}
+  .utoast.show{display:flex;}
+  .utoast button{flex:none;background:#fff;color:var(--accent-deep);border:none;border-radius:8px;padding:9px 12px;font-size:13px;font-weight:800;font-family:inherit;cursor:pointer;}
+
+  /* 履歴・発注リスト */
+  .hrow{padding:9px 4px;border-top:1px solid var(--line);font-size:13px;}
+  .hrow:first-child{border-top:none;}
+  .hrow .ht{font-size:11px;color:var(--ink-soft);font-weight:600;}
+  .hrow .hn{font-weight:700;word-break:break-word;}
+  .hrow .hv{font-weight:800;font-variant-numeric:tabular-nums;}
+  .ty{display:inline-block;border-radius:5px;padding:0 6px;font-size:10.5px;font-weight:800;margin-right:5px;background:#eef3f4;color:var(--ink-soft);}
+  .ty.use{background:#fff3e6;color:#a85a14;} .ty.count{background:#e3f4f4;color:var(--accent-deep);}
+  textarea.ordtxt{width:100%;height:240px;border:1.5px solid var(--line);border-radius:10px;padding:10px;font-size:12.5px;font-family:inherit;line-height:1.6;background:#fff;color:var(--ink);}
+  .dd-line{display:flex;justify-content:space-between;gap:10px;padding:8px 2px;border-top:1px solid var(--line);font-size:13.5px;}
+  .dd-line:first-child{border-top:none;}
+  .dd-line .dn{min-width:0;word-break:break-word;font-weight:700;}
+  .dd-line .dv{flex:none;font-weight:800;font-variant-numeric:tabular-nums;}
+  .dd-line.neg .dv{color:var(--danger);}
+  .dd-line.skip{color:var(--ink-soft);}
+  .dd-line.skip .dv{font-weight:600;font-size:12px;}
+  .chk{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;margin-top:10px;}
+  .chk input{width:20px;height:20px;accent-color:var(--accent);}
+  .job-in{width:100%;border:1.5px solid var(--line);border-radius:9px;padding:11px 12px;font-size:15px;font-family:inherit;color:var(--ink);}
+
+  /* 棚卸し */
+  .cv-top{position:sticky;top:0;z-index:2;background:#fff;box-shadow:0 1px 6px rgba(0,0,0,.12);padding:10px 14px 12px;}
+  .cv-row1{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;}
+  .cv-prog-txt{font-size:14px;font-weight:800;}
+  .bar{height:9px;background:#dbe6ea;border-radius:9px;overflow:hidden;}
+  .bar i{display:block;height:100%;background:var(--accent);border-radius:9px;transition:width .25s;}
+  .cv-in{max-width:600px;margin:0 auto;padding:10px 12px 40px;}
+  .cv-card{background:var(--surface);border-radius:16px;box-shadow:var(--shadow);padding:18px 14px 16px;margin-top:6px;text-align:center;}
+  .cv-cat{font-size:12px;color:var(--ink-soft);font-weight:700;}
+  .cv-name{font-size:19px;font-weight:800;line-height:1.35;margin:6px 0 4px;word-break:break-word;}
+  .cv-state{font-size:12.5px;font-weight:700;color:var(--ink-soft);min-height:18px;}
+  .cv-state.un{color:var(--warn);}
+  .cv-state.ok{color:var(--accent-deep);}
+  .cv-ctl{display:flex;align-items:center;justify-content:center;gap:12px;margin:16px 0 4px;}
+  .cv-btn{width:78px;height:78px;border-radius:20px;border:2px solid var(--line);background:#f1f6f7;color:var(--accent-deep);font-size:38px;font-weight:800;font-family:inherit;cursor:pointer;line-height:1;flex:none;}
+  .cv-btn:active{background:#e3f4f4;border-color:var(--accent);}
+  .cv-num{width:104px;border:2px solid var(--line);border-radius:16px;padding:14px 4px;font-size:34px;font-weight:800;text-align:center;font-family:inherit;color:var(--ink);font-variant-numeric:tabular-nums;min-width:0;}
+  .cv-num:focus{outline:none;border-color:var(--accent);}
+  .cv-unit{font-size:12px;color:var(--ink-soft);font-weight:600;min-height:16px;}
+  .cv-saved{font-size:12px;color:var(--accent-deep);font-weight:800;min-height:18px;margin-top:6px;}
+  .cv-acts{display:flex;gap:8px;margin-top:12px;}
+  .cv-acts button{border:none;border-radius:12px;padding:16px 8px;font-size:14.5px;font-weight:800;font-family:inherit;cursor:pointer;background:#eef3f4;color:var(--ink-soft);min-width:0;}
+  .cv-acts .go{flex:2.2;background:var(--accent);color:#fff;}
+  .cv-acts .sk{flex:1;}
+  .cv-acts .pv2{flex:.8;}
+  .cv-list{margin-top:14px;background:var(--surface);border-radius:13px;box-shadow:var(--shadow);overflow:hidden;}
+  .cv-li{display:flex;align-items:center;gap:8px;padding:11px 12px;border-top:1px solid var(--line);font-size:13px;cursor:pointer;}
+  .cv-li:first-child{border-top:none;}
+  .cv-li.cur{background:#e3f4f4;}
+  .cv-li .a{flex:1;min-width:0;word-break:break-word;font-weight:600;}
+  .cv-li .b{flex:none;font-weight:800;font-variant-numeric:tabular-nums;color:var(--ink-soft);}
+  .cv-li .b.ok{color:var(--accent-deep);} .cv-li .b.un{color:var(--warn);}
+  .cv-done{padding:26px 8px;font-size:15px;font-weight:800;line-height:1.7;}
+
+  /* ===== v0.9 追加: 別名・購入先・入出庫ファイル ===== */
+  .meta-ed{margin-top:11px;padding-top:10px;border-top:1px dashed var(--line);}
+  .me-l{font-size:11px;font-weight:700;color:var(--ink-soft);margin-bottom:5px;}
+  .me-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:7px;}
+  .me-al{display:inline-flex;align-items:center;gap:2px;background:#e3f4f4;color:var(--accent-deep);border-radius:16px;padding:3px 3px 3px 10px;font-size:12.5px;font-weight:700;max-width:100%;word-break:break-all;}
+  .me-al button{border:none;background:rgba(6,112,116,.14);color:var(--accent-deep);border-radius:50%;width:24px;height:24px;font-size:14px;line-height:1;font-family:inherit;cursor:pointer;flex:none;}
+  .me-none{font-size:12px;color:var(--ink-soft);opacity:.7;}
+  .me-add{display:flex;gap:7px;}
+  .me-in,.me-shop{flex:1;min-width:0;width:100%;border:1.5px solid var(--line);border-radius:8px;padding:10px;font-size:16px;font-family:inherit;color:var(--ink);background:#fff;}
+  .me-in:focus,.me-shop:focus{outline:none;border-color:var(--accent);}
+  .me-addb{flex:none;border:none;border-radius:8px;background:var(--accent);color:#fff;padding:0 15px;font-size:13.5px;font-weight:800;font-family:inherit;cursor:pointer;}
+  .me-sc{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px;}
+  .me-sp{border:1.5px solid var(--line);background:#fff;border-radius:16px;padding:7px 12px;font-size:12.5px;font-weight:700;color:var(--ink-soft);font-family:inherit;cursor:pointer;}
+  .me-sp.on{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .shop{color:var(--ink-soft);opacity:.85;font-size:11px;font-weight:600;}
+  .al-chip{background:#e3f4f4;color:var(--accent-deep);border-radius:5px;padding:1px 6px;font-size:10.5px;font-weight:700;}
+  .srow-btns{display:flex;gap:6px;flex:none;}
+  .hist-btn.meta{padding:6px 10px;font-size:13px;}
+  .st-actions.second{margin-top:0;margin-bottom:6px;}
+  .ty.add{background:#e6f1ff;color:#2a5da8;} .ty.new{background:#efe8ff;color:#6a45b5;}
+  .ty.newItem{background:#efe8ff;color:#6a45b5;} .ty.alias{background:#eef3f4;color:var(--ink-soft);}
+  .ops-head{font-size:13px;line-height:1.7;}
+  .ops-head b{font-weight:800;}
+  .ops-sum{font-size:12.5px;font-weight:700;margin:2px 0 9px;color:var(--ink-soft);line-height:1.6;}
+  .op-row{display:flex;gap:9px;align-items:flex-start;padding:10px 4px;border-top:1px solid var(--line);cursor:pointer;}
+  .op-row:first-child{border-top:none;}
+  .op-row input{width:22px;height:22px;flex:none;accent-color:var(--accent);margin-top:1px;}
+  .op-b{min-width:0;flex:1;}
+  .op-nm{font-size:13.5px;font-weight:700;word-break:break-word;}
+  .op-v{font-size:13px;font-weight:800;font-variant-numeric:tabular-nums;margin-top:2px;}
+  .op-v.neg{color:var(--danger);}
+  .op-m{font-size:11.5px;color:var(--ink-soft);margin-top:2px;line-height:1.5;word-break:break-word;}
+  .op-m.w{color:#a85a14;font-weight:700;}
+  .op-m.e{color:var(--danger);font-weight:700;}
+  .op-row.err{opacity:.8;background:#fdf1f0;border-radius:9px;}
+  .op-row.off .op-nm,.op-row.off .op-v{opacity:.45;}
+  .op-row.warn{background:#fffaf2;}
 </style>
 </head>
 <body>
@@ -237,15 +458,22 @@
         <path d="M12 2.5C12 2.5 5 10 5 14.5C5 18.5 8.13 21.5 12 21.5C15.87 21.5 19 18.5 19 14.5C19 10 12 2.5 12 2.5Z" fill="#0a9396"/>
         <path d="M9 14.5C9 16.16 10.34 17.5 12 17.5" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>
       </svg>
-      HW部材集計
+      HW部材集計 <span style="font-size:10.5px;font-weight:700;color:var(--ink-soft);opacity:.7;margin-left:2px;">v0.9</span>
     </div>
     <div class="subtitle">HYPER Water 設置で使った部材を集計</div>
+    <div class="price-date" id="priceDate"></div>
   </header>
 
+  <div class="viewbar"><div class="seg" role="tablist">
+    <button type="button" id="segCollect" class="on" role="tab">📋 集計</button>
+    <button type="button" id="segStock" role="tab">📦 在庫</button>
+  </div></div>
+
+<div id="viewCollect">
   <div class="toolbar">
     <div class="search-box">
       <svg viewBox="0 0 24 24" fill="none" stroke="#16323d" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
-      <input type="text" id="search" placeholder="部材名で検索" autocomplete="off">
+      <input type="text" id="search" placeholder="部材名・別名で検索" autocomplete="off">
     </div>
     <div class="filter-row">
       <label class="toggle"><input type="checkbox" id="usedOnly"><span class="sw"></span>使った部材だけ表示</label>
@@ -289,6 +517,7 @@
         <input type="number" id="newLen" placeholder="100" inputmode="decimal" min="0" step="0.1">
       </div>
     </div>
+    <div class="field" id="newMeta" style="margin-bottom:12px;"></div>
     <div class="form-actions">
       <button class="btn-primary" id="saveBtn">追加する</button>
       <button class="btn-ghost" id="cancelBtn">やめる</button>
@@ -298,10 +527,13 @@
   <!-- データ管理（削除・数量リセット・バックアップ書き出し/読み込み） v0.5/v0.6 -->
   <div class="data-tools" id="dataTools">
     <button class="data-btn" id="deleteModeBtn" type="button">🗑️ 項目を削除</button>
+    <button class="data-btn" id="mergeBtn" type="button">🔗 重複をまとめる</button>
     <button class="data-btn" id="resetQtyBtn" type="button">🧹 数量を全部リセット</button>
     <button class="data-btn" id="exportBtn" type="button">⬇️ バックアップを書き出す</button>
     <button class="data-btn" id="importBtn" type="button">⬆️ 読み込む</button>
     <input type="file" id="importFile" accept="application/json,.json" style="display:none;">
+    <button class="data-btn" id="opsBtn" type="button">📥 ファイルを取り込む（入出庫）</button>
+    <input type="file" id="opsFile" accept="application/json,.json" style="display:none;">
   </div>
   <!-- 削除モード中だけ出るボタン行 v0.6追加 -->
   <div class="delete-actions" id="deleteActions" style="display:none;">
@@ -341,7 +573,35 @@
       </div>
     </div>
   </div>
+</div><!-- /viewCollect -->
+
+<!-- ===== 在庫タブ(v0.8) ===== -->
+<div id="viewStock">
+  <div class="st-sum" id="stSum"></div>
+  <div class="st-actions">
+    <button class="st-btn primary" id="stCount" type="button">🧮 棚卸しをはじめる</button>
+    <button class="st-btn" id="stOrder" type="button">🛒 発注リスト</button>
+    <button class="st-btn" id="stHist" type="button">📜 履歴</button>
+  </div>
+  <div class="st-actions second"><button class="st-btn" id="stImport" type="button">📥 ファイルを取り込む（入出庫）</button></div>
+  <div class="st-undo" id="stUndo" style="display:none;"></div>
+  <div class="st-undo" id="stUndo2" style="display:none;"></div>
+  <div class="toolbar">
+    <div class="search-box">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#16323d" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      <input type="text" id="stockSearch" placeholder="部材名・別名で検索" autocomplete="off">
+    </div>
+    <div class="chips"><button class="chip on" id="fAll" type="button">すべて</button><button class="chip warn" id="fShort" type="button">足りないもの</button><button class="chip" id="fUnc" type="button">まだ数えてない</button></div>
+  </div>
+  <div id="stockList"></div>
 </div>
+</div>
+
+<!-- 共通: ダイアログ・シート・棚卸し・元に戻すトースト(v0.8) -->
+<div class="cv" id="cv"></div>
+<div class="sheet" id="sheet"><div class="sheet-bar"><div class="sheet-title" id="sheetTitle"></div><button type="button" id="sheetClose">✕ とじる</button></div><div class="sheet-body" id="sheetBody"></div></div>
+<div class="dlg" id="dlg"><div class="dlg-box"><div class="dlg-title" id="dlgTitle"></div><div class="dlg-body" id="dlgBody"></div><div class="dlg-btns" id="dlgBtns"></div></div></div>
+<div class="utoast" id="undoToast"><span id="utMsg"></span><button type="button" id="utBtn">元に戻す</button></div>
 
 <!-- 印刷用 集計表ビュー(マーフィード送付用) -->
 <div class="print-view" id="printView">
@@ -364,7 +624,7 @@
       <div class="tb-col"><div class="tb-label">消費税 <input type="number" class="tax-input num" id="taxRate" value="10" min="0" max="100">%</div><div class="tb-val num" id="taxAmount">¥0</div></div>
       <div class="tb-col tb-grand"><div class="tb-label">総合計</div><div class="tb-val num" id="grandTotal">¥0</div></div>
     </div>
-    <div class="tb-meta"><span class="used-pill" id="usedPill">0点 使用中</span></div>
+    <div class="tb-meta"><span class="used-pill" id="usedPill">0点 使用中</span><button class="deduct-btn" id="deductBtn" type="button">📦 使った分を在庫から引く</button></div>
     <div class="tb-actions">
       <button class="copy-btn" id="copyBtn">
         <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
@@ -398,6 +658,7 @@
   // v0.6: 削除モードのON/OFFを切り替え（ボタン行の表示も入れ替えて再描画）
   function setDeleteMode(on){
     deleteMode = on;
+    document.body.classList.toggle("del-on", on);
     deleteChecked.clear();
     const dt = document.getElementById("dataTools");
     const da = document.getElementById("deleteActions");
@@ -407,13 +668,6 @@
     render();
   }
   // v0.6: 選択した部材を、確認のうえ削除
-  function doDelete(){
-    if(deleteChecked.size === 0){ alert("削除する項目にチェックを入れてね"); return; }
-    if(!confirm(`本当に削除しますか？\n（選択した ${deleteChecked.size} 件を削除します）`)) return;
-    materials = materials.filter(m => !deleteChecked.has(m.id));
-    saveState();
-    setDeleteMode(false);   // モード解除（内部でrender）
-  }
 
   // ===== 作業状態の保存/復元（v0.5追加：カスタム部材＋単価編集＋数量＋税率を丸ごと自動保存） =====
   // 部材リスト・採番・税率を1キーにまとめて保存。入力のたびに自動セーブされ、再読込・アプリ終了でも消えない。
@@ -429,7 +683,7 @@
   function migratePrices(list){
     let updated = 0, kept = 0;
     list.forEach(m => {
-      if(!m || !(m.id in OLD_PRICES) || !(m.id in NEW_PRICES)) return;
+      if(!m || m.pe || m.cu || !(m.id in OLD_PRICES) || !(m.id in NEW_PRICES)) return;   // v0.8: pe=手で変えた価格は触らない
       const o = OLD_PRICES[m.id], n = NEW_PRICES[m.id];
       if(o === n) return;
       if(m.price === o){ m.price = n; updated++; }
@@ -455,11 +709,17 @@
   // 現在の作業状態を1つのオブジェクトにまとめる
   function collectState(){
     return {
-      v: 1,
-      priceRev: PRICE_REV,
+      v: 3,
+      priceRev: priceRev,
       savedAt: new Date().toISOString(),
       taxRate: Number(document.getElementById("taxRate").value) || 0,
       nextId: nextId,
+      round: invRound,
+      dupIgnore: dupIgnore,
+      lastUse: lastUse,
+      imp: imports,
+      lastImp: lastImp,
+      history: stockLog,
       materials: materials
     };
   }
@@ -475,20 +735,9 @@
       if(!raw) return;
       const s = JSON.parse(raw);
       if(s && Array.isArray(s.materials) && s.materials.length){
-        materials = s.materials;
-        // 採番は「保存値」と「現部材の最大ID+1」の大きい方に補正（ID重複を防ぐ）
-        const maxId = materials.reduce((mx,m) => Math.max(mx, m.id||0), 0);
-        nextId = Math.max(Number(s.nextId)||0, maxId + 1);
-        if(typeof s.taxRate === "number"){
-          const t = document.getElementById("taxRate");
-          if(t) t.value = s.taxRate;
-        }
-        // v0.7: 旧い保存データは一度だけ価格を移行して保存し直す
-        if(s.priceRev !== PRICE_REV){
-          const r = migratePrices(materials);
-          saveState();
-          if(r.updated > 0) showToast(priceMsg(r));
-        }
+        const res = applyState(s);          // v:1→v:2 移行・価格移行もここで
+        if(res.changed) saveState();
+        if(res.r.updated > 0) showToast(priceMsg(res.r));
       }
     }catch(e){ /* 破損 → 初期データで動く */ }
   }
@@ -522,21 +771,11 @@
         const s = JSON.parse(e.target.result);
         if(!s || !Array.isArray(s.materials) || !s.materials.length) throw new Error("部材データが見つかりません");
         if(!confirm(`このバックアップを読み込むと、今の内容は置き換わります。\n（部材 ${s.materials.length} 件）\n\nよろしいですか？`)) return;
-        materials = s.materials;
-        const maxId = materials.reduce((mx,m) => Math.max(mx, m.id||0), 0);
-        nextId = Math.max(Number(s.nextId)||0, maxId + 1);
-        if(typeof s.taxRate === "number"){
-          const t = document.getElementById("taxRate");
-          if(t) t.value = s.taxRate;
-        }
-        // v0.7: 旧いバックアップ(priceRevなし/古い)は同じ規則で価格を移行する
+        const res = applyState(s);   // 旧い(v:1)バックアップは不足項目を既定値で補って移行
         let note = "";
-        if(s.priceRev !== PRICE_REV){
-          const r = migratePrices(materials);
-          if(r.updated > 0) note = "\n\n（旧いバックアップのため、" + priceMsg(r) + "）";
-        }
+        if(res.r.updated > 0) note = "\n\n（旧いバックアップのため、" + priceMsg(res.r) + "）";
         saveState();
-        render();
+        render(); if(view === "stock") renderStock();
         alert("読み込みました！" + note);
       }catch(err){ alert("読み込めませんでした：" + err.message); }
     };
@@ -613,7 +852,7 @@
     cats.forEach(cat => {
       let group = materials.filter(m => m.cat === cat);
       if(usedOnly) group = group.filter(m => m.qty > 0);
-      if(q) group = group.filter(m => (m.name + " " + m.size).toLowerCase().includes(q));
+      if(q) group = group.filter(m => matchQ(m, q));
       if(group.length === 0) return;
       anyShown = true;
 
@@ -642,8 +881,10 @@
 
     if(!anyShown) listEl.innerHTML = `<div class="no-result">該当する部材がないよ。<br>検索ワードを変えるか、下の「＋新しい部材を追加」で登録してね。</div>`;
 
+    if(deleteMode) listEl.insertAdjacentHTML("afterbegin", `<div class="del-banner">🗑️ 削除モード: 消したい項目の行をタップして選んでください。名前を確認してから「削除」を押すと、約8秒は元に戻せます。</div>`);
     bindEvents();
     renderTotals();
+    renderPriceDate();
   }
 
   function itemHtml(m){
@@ -652,14 +893,17 @@
     const metaParts = [];
     if(m.size) metaParts.push(`<span class="size-tag">${esc(m.size)}</span>`);
     if(isLen) metaParts.push(`<span class="len-chip">m単位</span>`);
+    if(m.qty > 0 && deleteMode) metaParts.push(`<span class="use-chip">使用 ${m.qty}${isLen?"m":""}</span>`);
+    if(m.stock != null) metaParts.push(`<span class="stk-chip${isShort(m)?" low":""}">在庫 ${m.stock}${isLen?"m":""}${isShort(m)?" ⚠":""}</span>`);
 
+    { const ah = aliasHint(m, ($("search").value || "").trim()); if(ah) metaParts.push(`<span class="al-chip">別名: ${esc(ah)}</span>`); }
     let body;
     if(isLen){
       const u = unitOf(m);
       let opts = "";  // 使用mは数値入力
       body = `
         <div class="len-row">
-          <div class="len-calc">購入 ${yen(m.price)} ÷ ${m.packLen||"?"}m <span class="um">＝ ${m.packLen>0?yenU(u):"—"}/m</span></div>
+          <div class="len-calc">購入 ${priceBtn(m)} ÷ ${m.packLen||"?"}m <span class="um">＝ ${m.packLen>0?yenU(u):"—"}/m</span></div>
           <div class="len-use">
             <span class="lbl">使用</span>
             <input type="number" class="use-m${m.qty>0?" active":""}" data-id="${m.id}" value="${m.qty||""}" placeholder="0" inputmode="decimal" min="0" step="0.1">
@@ -673,7 +917,7 @@
       for(let i=0;i<=QTY_MAX;i++) opts += `<option value="${i}" ${i===m.qty?"selected":""}>${i}</option>`;
       body = `
         <div class="item-bottom">
-          <span class="price">${yen(m.price)}</span>
+          ${priceBtn(m)}
           <span class="times">×</span>
           <select class="qty${m.qty>0?" active":""}" data-id="${m.id}">${opts}</select>
           <span class="eq">=</span>
@@ -681,12 +925,12 @@
         </div>`;
     }
 
-    const panel = (editingId === m.id) ? editPanelHtml(m) : "";
+    const panel = (editingId === m.id) ? editPanelHtml(m) : ((editingPriceId === m.id) ? priceEditRow(m) : "");
 
     // v0.6: 削除モード中はチェックボックス付きの行（数量・編集は隠して削除に集中）
     if(deleteMode){
       return `
-      <div class="item del-mode${m.qty>0?" has-qty":""}">
+      <div class="item del-mode${m.qty>0?" has-qty":""}${deleteChecked.has(m.id)?" sel":""}">
         <label class="item-top del-row">
           <input type="checkbox" class="del-check" data-id="${m.id}" ${deleteChecked.has(m.id)?"checked":""}>
           <div>
@@ -733,6 +977,7 @@
           </div>
         </div>
         <div class="ep-hint" id="ephint-${m.id}"></div>
+        <div class="ep-meta"></div>
         <div class="ep-actions">
           <button class="ep-save" data-id="${m.id}">保存</button>
           <button class="ep-cancel">キャンセル</button>
@@ -741,6 +986,7 @@
   }
 
   function bindEvents(){
+    bindPriceEdit();
     listEl.querySelectorAll(".cat-head").forEach(btn => {
       btn.addEventListener("click", () => {
         const c = btn.dataset.cat;
@@ -761,13 +1007,14 @@
       });
     });
     listEl.querySelectorAll(".icon-btn.edit").forEach(btn => {
-      btn.addEventListener("click", () => { editingId = Number(btn.dataset.id); render(); });
+      btn.addEventListener("click", () => { editingId = Number(btn.dataset.id); editingPriceId = null; render(); });
     });
     // v0.6: 削除モードのチェックボックス（チェックで選択、件数ラベルだけ更新＝重い再描画なし）
     listEl.querySelectorAll("input.del-check").forEach(chk => {
       chk.addEventListener("change", e => {
         const id = Number(e.target.dataset.id);
         if(e.target.checked) deleteChecked.add(id); else deleteChecked.delete(id);
+        e.target.closest(".item").classList.toggle("sel", e.target.checked);
         updateDeleteLabel();
       });
     });
@@ -779,6 +1026,9 @@
       const priceInp = panel.querySelector(".ep-price");
       const lenInp = panel.querySelector(".ep-len");
       const hint = panel.querySelector(".ep-hint");
+      const epItem = materials.find(x => x.id === id) || {};
+      const epMeta = metaEditor({ al: epItem.al, shop: epItem.shop });
+      panel.querySelector(".ep-meta").appendChild(epMeta.node);
       const updateHint = () => {
         const mode = panel.querySelector(`input[name="epmode-${id}"]:checked`).value;
         if(mode==='length'){
@@ -802,8 +1052,9 @@
         if(!m) return;
         const mode = panel.querySelector(`input[name="epmode-${id}"]:checked`).value;
         const price = Math.max(0, parseFloat(priceInp.value) || 0);
-        m.price = price;
+        setPrice(m, price);
         m.mode = mode;
+        applyMeta(m, epMeta.get());
         if(mode==='length'){
           const L = Math.max(0, parseFloat(lenInp.value) || 0);
           m.packLen = L;
@@ -882,6 +1133,7 @@
   });
   addBtn.addEventListener("click", () => { addForm.classList.add("open"); addBtn.style.display="none"; document.getElementById("newName").focus(); });
   function closeForm(){
+    resetAddMeta();
     addForm.classList.remove("open"); addBtn.style.display="flex";
     document.getElementById("formErr").classList.remove("show");
     ["newName","newSize","newPrice","newLen"].forEach(id => document.getElementById(id).value="");
@@ -901,7 +1153,9 @@
       document.getElementById("formErr").classList.add("show"); return;
     }
     const cat = newCatSel.value;
-    materials.push({ id:nextId++, cat, name, size:document.getElementById("newSize").value.trim(), mode, price, packLen, qty:0 });
+    const nm9 = { id:nextId++, cat, name, size:document.getElementById("newSize").value.trim(), mode, price, packLen, qty:0, cu:1 };
+    applyMeta(nm9, addMeta.get());
+    materials.push(nm9);
     openCats[cat] = true;
     saveState();
     closeForm(); render();
@@ -1011,6 +1265,1037 @@
   document.getElementById("deleteModeBtn").addEventListener("click", () => setDeleteMode(true));
   document.getElementById("cancelDeleteBtn").addEventListener("click", () => setDeleteMode(false));
   document.getElementById("doDeleteBtn").addEventListener("click", doDelete);
+
+
+  // =====================================================================
+  // v0.8 追加: 在庫管理 / 削除の分かりやすさ / 単価の行内編集 / 重複まとめ
+  // 保存形式 v:2 （v:1 は読み込み時に自動移行）。追加キー:
+  //   部材: stock(在庫) reorder(発注点) counted(最終カウント日時) pe(1=単価を手で変更)
+  //   全体: history(在庫の履歴・最新100件) round(棚卸し開始日時) lastUse(直前の引き算) dupIgnore(別物と判断した組)
+  // =====================================================================
+  let view = "collect";
+  let stockLog = [];          // 履歴(新しいものが後ろ)
+  let invRound = null;        // 今回の棚卸しの開始日時(これ以降にカウントしたら「数えた」)
+  let lastUse = null;         // 直前の「在庫から引く」(取り消し用)
+  let dupIgnore = [];         // 「別物」と判断した組 "id-id"
+  let priceRev = PRICE_REV;   // 価格の基準日
+  let editingPriceId = null;  // 単価の行内編集中の部材ID
+  const STOCK_OPEN = {};
+  let stockFilter = "all";
+
+  const nfkc = s => String(s == null ? "" : s).normalize("NFKC");
+  const dispName = m => { const n = m.name || "", z = m.size || ""; return (z && !nfkc(n).includes(nfkc(z))) ? n + " " + z : n; };
+  const nowIso = () => new Date().toISOString();
+  const p2 = n => String(n).padStart(2, "0");
+  const fmtDate = iso => { const d = new Date(iso); return isNaN(d) ? "" : `${d.getMonth()+1}/${d.getDate()}`; };
+  const fmtDT = iso => { const d = new Date(iso); return isNaN(d) ? "" : `${d.getMonth()+1}/${d.getDate()} ${p2(d.getHours())}:${p2(d.getMinutes())}`; };
+  const r1 = n => Math.round(n * 10) / 10;
+  const unitTxt = m => m.mode === "length" ? "m" : "";
+  const isShort = m => m.stock != null && ((m.reorder != null && m.stock <= m.reorder) || m.stock <= 0);
+  const needOf = m => r1(m.reorder != null ? Math.max(1, m.reorder - m.stock) : 1);
+  const isCounted = m => !!m.counted && (!invRound || m.counted >= invRound);
+  const byCat = () => {
+    const have = [...new Set(materials.map(m => m.cat))];
+    return [...CAT_ORDER.filter(c => have.includes(c)), ...have.filter(c => !CAT_ORDER.includes(c))];
+  };
+  const orderedItems = () => byCat().flatMap(c => materials.filter(m => m.cat === c));
+  const $ = id => document.getElementById(id);
+
+  // ---- 保存状態の整形(v:1→v:2 移行・取り込み共通) ----
+  function cleanItem(m){
+    ["stock", "reorder"].forEach(k => {
+      if(m[k] == null || m[k] === "" || !isFinite(Number(m[k]))) delete m[k]; else m[k] = Number(m[k]);
+    });
+    if(m.reorder != null && m.reorder < 0) delete m.reorder;
+    if(typeof m.counted !== "string") delete m.counted;
+    if(m.pe) m.pe = 1; else delete m.pe;
+    if(Array.isArray(m.al)){ m.al = normAliases(m.al); if(!m.al.length) delete m.al; } else delete m.al;   // v0.9
+    if(typeof m.shop === "string" && m.shop.trim()) m.shop = m.shop.trim().slice(0, 30); else delete m.shop;
+    if(m.cu) m.cu = 1; else delete m.cu;
+  }
+  // 手で変えた単価に目印(pe)を付ける: 初期データの部材で、価格が現在の基準価格と違うもの
+  function markEditedPrices(list){
+    list.forEach(m => { if(m && !m.cu && m.id in NEW_PRICES && m.price !== NEW_PRICES[m.id]) m.pe = 1; });
+  }
+  function applyState(s){
+    materials = s.materials.filter(m => m && typeof m === "object" && m.id != null);
+    materials.forEach(cleanItem);
+    const maxId = materials.reduce((mx, m) => Math.max(mx, m.id || 0), 0);
+    nextId = Math.max(Number(s.nextId) || 0, maxId + 1);
+    if(typeof s.taxRate === "number"){ const t = $("taxRate"); if(t) t.value = s.taxRate; }
+    stockLog = Array.isArray(s.history) ? s.history.filter(e => e && e.t).slice(-100) : [];
+    invRound = typeof s.round === "string" ? s.round : null;
+    lastUse = (s.lastUse && Array.isArray(s.lastUse.items)) ? s.lastUse : null;
+    dupIgnore = Array.isArray(s.dupIgnore) ? s.dupIgnore.filter(x => typeof x === "string") : [];
+    let r = { updated: 0, kept: 0 }, changed = false;
+    if(s.priceRev !== PRICE_REV){ r = migratePrices(materials); changed = true; }   // v0.7: 価格の一括移行
+    if(!(Number(s.v) >= 2)){ markEditedPrices(materials); changed = true; }          // v0.8: v:1→v:2
+    if(!(Number(s.v) >= 3)){ materials.forEach(m => { if(!(m.id in NEW_PRICES)) m.cu = 1; }); changed = true; }   // v0.9: v:2→v:3 自分で足した部材=cu
+    imports = Array.isArray(s.imp) ? s.imp.filter(x => x && typeof x === "object").slice(-50) : [];
+    lastImp = (s.lastImp && Array.isArray(s.lastImp.items) && s.lastImp.j) ? s.lastImp : null;
+    priceRev = (typeof s.priceRev === "string" && s.priceRev > PRICE_REV) ? s.priceRev : PRICE_REV;
+    return { r, changed };
+  }
+  function setPrice(m, p){
+    m.price = p;
+    if(m.id in NEW_PRICES && p !== NEW_PRICES[m.id]) m.pe = 1; else delete m.pe;
+  }
+
+  // ---- 履歴 ----
+  function logStock(m, type, from, to, note, job){
+    if(from === to && type !== "use") return;
+    const last = stockLog[stockLog.length - 1];
+    if(last && last.id === m.id && last.type === type && (type === "count" || type === "manual") && !job && !last.j && Date.now() - Date.parse(last.t) < 120000){
+      last.to = to; last.t = nowIso();
+      if(last.from === last.to) stockLog.pop();     // 元の数に戻ったら記録ごと消す
+    }else{
+      const e = { t: nowIso(), id: m.id, n: dispName(m), type, from, to };
+      if(note) e.note = note;
+      if(job) e.j = job;
+      stockLog.push(e);
+    }
+    if(stockLog.length > 100) stockLog.splice(0, stockLog.length - 100);
+  }
+  function setStock(m, v, type){
+    const from = m.stock == null ? null : m.stock;
+    if(v == null) delete m.stock; else m.stock = r1(v);
+    if(type === "count") m.counted = nowIso();
+    logStock(m, type, from, m.stock == null ? null : m.stock);
+    saveState();
+  }
+
+  // ---- ダイアログ・シート・トースト ----
+  function lockScroll(){
+    const on = ["sheet", "cv", "printView", "dlg"].some(id => $(id).classList.contains("open"));
+    document.body.style.overflow = on ? "hidden" : "";
+  }
+  function openDlg(o){
+    $("dlgTitle").textContent = o.title || "";
+    $("dlgBody").innerHTML = o.html || "";
+    const box = $("dlgBtns"); box.innerHTML = "";
+    (o.buttons || [{ t: "OK", cls: "b-pri" }]).forEach(b => {
+      const el = document.createElement("button");
+      el.type = "button"; el.textContent = b.t; el.className = b.cls || "b-ghost";
+      el.addEventListener("click", () => { closeDlg(); if(b.fn) b.fn(); });
+      box.appendChild(el);
+    });
+    $("dlg").classList.add("open"); lockScroll();
+  }
+  function closeDlg(){ $("dlg").classList.remove("open"); lockScroll(); }
+  function openSheet(title, node){
+    $("sheetTitle").textContent = title;
+    const b = $("sheetBody"); b.innerHTML = "";
+    if(typeof node === "string") b.innerHTML = node; else b.appendChild(node);
+    $("sheet").classList.add("open"); $("sheet").scrollTop = 0; lockScroll();
+    return b;
+  }
+  function closeSheet(){ $("sheet").classList.remove("open"); lockScroll(); }
+  let undoFn = null, undoTimer = null;
+  function showUndo(msg, fn, ms){
+    const t = $("undoToast");
+    $("utMsg").textContent = msg;
+    undoFn = fn; $("utBtn").style.display = fn ? "" : "none";
+    // 下の固定バー(合計バー等)に重ならない位置へ
+    let off = 16;
+    const tb = document.querySelector(".totalbar");
+    if(tb && getComputedStyle(tb).display !== "none") off = tb.getBoundingClientRect().height + 12;
+    t.style.bottom = off + "px";
+    t.classList.add("show");
+    clearTimeout(undoTimer);
+    undoTimer = setTimeout(hideUndo, ms || 8000);
+  }
+  function hideUndo(){ $("undoToast").classList.remove("show"); undoFn = null; clearTimeout(undoTimer); }
+  $("utBtn").addEventListener("click", () => { const f = undoFn; hideUndo(); if(f) f(); });
+  $("sheetClose").addEventListener("click", closeSheet);
+  function notice(title, html){ openDlg({ title, html, buttons: [{ t: "OK", cls: "b-pri" }] }); }
+
+  // ---- 画面切替(集計 / 在庫) ----
+  function setView(v){
+    view = v;
+    document.body.classList.toggle("v-stock", v === "stock");
+    $("segCollect").classList.toggle("on", v === "collect");
+    $("segStock").classList.toggle("on", v === "stock");
+    window.scrollTo(0, 0);
+    if(v === "stock") renderStock(); else render();
+  }
+  $("segCollect").addEventListener("click", () => setView("collect"));
+  $("segStock").addEventListener("click", () => setView("stock"));
+
+  // ---- 価格の基準日(ヘッダー下に小さく) ----
+  function renderPriceDate(){
+    const any = materials.some(m => m.pe);
+    $("priceDate").innerHTML = `<div>価格は ${esc(priceRev)} 時点（モノタロウ基準）</div>` + (any ? `<div>● は手で変更した価格</div>` : "");
+  }
+
+  // ---- 項目削除(名前入りの確認＋8秒の元に戻す) ----
+  function doDelete(){
+    const items = materials.filter(m => deleteChecked.has(m.id));
+    if(items.length === 0){ notice("削除する項目を選んでね", "削除したい項目の行をタップして選んでから、もう一度おしてね。"); return; }
+    let html;
+    if(items.length === 1) html = `<span class="nm">「${esc(dispName(items[0]))}」</span>を削除しますか?`;
+    else{
+      const show = items.slice(0, 8).map(m => `<li>${esc(dispName(m))}</li>`).join("");
+      html = `選んだ <span class="nm">${items.length}件</span> を削除しますか?<ul>${show}</ul>` + (items.length > 8 ? `<div>ほか ${items.length - 8}件</div>` : "");
+    }
+    if(items.some(m => m.qty > 0 || (m.stock || 0) !== 0)) html += `<div class="dlg-warn">※ 使用数や在庫が入っている項目が含まれています</div>`;
+    html += `<div style="margin-top:9px;font-size:12px;color:var(--ink-soft);">削除のあと約8秒間は「元に戻す」ができます。</div>`;
+    openDlg({
+      title: "削除の確認", html,
+      buttons: [{ t: "やめる", cls: "b-ghost" }, { t: "削除する", cls: "b-dng", fn: () => {
+        const removed = items.map(m => ({ m, i: materials.indexOf(m) })).sort((a, b) => a.i - b.i);
+        materials = materials.filter(m => !deleteChecked.has(m.id));
+        saveState();
+        setDeleteMode(false);
+        showUndo(items.length === 1 ? `「${dispName(items[0])}」を削除しました` : `${items.length}件を削除しました`, () => {
+          removed.forEach(r => materials.splice(Math.min(r.i, materials.length), 0, r.m));
+          saveState(); render(); if(view === "stock") renderStock();
+        });
+      } }]
+    });
+  }
+
+  // ---- 単価の行内編集 ----
+  function priceBtn(m){
+    return `<button type="button" class="price-btn" data-id="${m.id}" title="単価を変更"><span class="pv">${yen(m.price)}</span>${m.pe ? '<i class="pe-dot">●</i>' : ""}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button>`;
+  }
+  function priceEditRow(m){
+    const lbl = m.mode === "length" ? "購入金額(円)" : "単価(円)";
+    return `<div class="pe-row" data-id="${m.id}"><label>${lbl}を変更</label>
+      <div class="pe-line"><input type="text" class="pe-in" inputmode="numeric" value="${m.price}" aria-label="${lbl}">
+      <button class="pe-ok" type="button">保存</button><button class="pe-no" type="button">やめる</button></div>
+      <div class="pe-err"></div><div class="pe-hint">税別・整数の円。変更すると ● が付き、価格の自動更新の対象外になります。</div></div>`;
+  }
+  function bindPriceEdit(){
+    listEl.querySelectorAll(".price-btn").forEach(b => b.addEventListener("click", () => {
+      editingPriceId = Number(b.dataset.id); editingId = null; render();
+      const inp = listEl.querySelector(".pe-in"); if(inp){ inp.focus(); inp.select(); }
+    }));
+    listEl.querySelectorAll(".pe-row").forEach(row => {
+      const id = Number(row.dataset.id), inp = row.querySelector(".pe-in"), err = row.querySelector(".pe-err");
+      const save = () => {
+        const raw = nfkc(inp.value).trim().replace(/[,，]/g, "");
+        if(!/^\d+$/.test(raw)){ err.textContent = "0以上の整数(円)で入れてね"; inp.focus(); return; }
+        const m = materials.find(x => x.id === id); if(!m) return;
+        setPrice(m, Number(raw)); editingPriceId = null; saveState(); render();
+      };
+      row.querySelector(".pe-ok").addEventListener("click", save);
+      row.querySelector(".pe-no").addEventListener("click", () => { editingPriceId = null; render(); });
+      inp.addEventListener("keydown", e => { if(e.key === "Enter"){ e.preventDefault(); save(); } });
+    });
+  }
+
+  // ---- 履歴シート ----
+  const TYPE_LBL = { count: "棚卸し", use: "使用", manual: "手動修正", merge: "まとめ", add: "入庫", new: "新規登録" };
+  function openHistory(id){
+    let list = stockLog.slice().reverse();
+    if(id != null) list = list.filter(e => e.id === id);
+    const m = id != null ? materials.find(x => x.id === id) : null;
+    const v = x => x == null ? "未" : x;
+    const body = list.length ? list.map(e => `<div class="hrow"><div class="ht"><span class="ty ${e.type}">${TYPE_LBL[e.type] || e.type}</span>${fmtDT(e.t)}${e.note ? "　" + esc(e.note) : ""}</div>
+        <div class="hn">${esc(m ? "" : (e.n || ""))}${m ? "" : "　"}<span class="hv">${v(e.from)} → ${v(e.to)}</span></div></div>`).join("")
+      : `<div class="no-result">まだ履歴はありません。</div>`;
+    openSheet(m ? `履歴: ${dispName(m)}` : "在庫の履歴(最新100件)", `<div class="card">${body}</div>`);
+  }
+
+  // ---- 在庫タブ ----
+  function stockRowHtml(m){
+    const short = isShort(m), u = unitTxt(m);
+    const meta = [];
+    if(m.size) meta.push(`<span class="size-tag">${esc(m.size)}</span>`);
+    if(m.mode === "length") meta.push(`<span class="len-chip">m単位</span>`);
+    meta.push(m.counted ? `<span>最終カウント ${fmtDate(m.counted)}</span>` : `<span class="un">まだ数えてない</span>`);
+    if(m.shop) meta.push(`<span class="shop">🏪 ${esc(m.shop)}</span>`);
+    { const ah = aliasHint(m, ($("stockSearch").value || "").trim()); if(ah) meta.push(`<span class="al-chip">別名: ${esc(ah)}</span>`); }
+    return `<div class="srow${short ? " short" : ""}" data-id="${m.id}">
+      <div class="srow-top"><div class="srow-name">${esc(m.name)}<div class="item-meta">${meta.join("")}</div></div>
+        <div class="srow-btns"><button class="hist-btn meta" type="button" data-meta="${m.id}" aria-label="別名・購入先を編集">✎</button><button class="hist-btn" type="button" data-hist="${m.id}">履歴</button></div></div>
+      <div class="srow-ctl"><span class="lbl">在庫</span>
+        <button class="stp" type="button" data-act="dec" data-id="${m.id}" aria-label="減らす">−</button>
+        <input class="stk-in" type="text" inputmode="decimal" data-id="${m.id}" value="${m.stock == null ? "" : m.stock}" placeholder="未" aria-label="在庫数">
+        <button class="stp" type="button" data-act="inc" data-id="${m.id}" aria-label="増やす">＋</button><span class="lbl">${u}</span>
+        <span class="lbl r">発注点</span>
+        <input class="ro-in" type="text" inputmode="decimal" data-id="${m.id}" value="${m.reorder == null ? "" : m.reorder}" placeholder="—" aria-label="発注点"></div>
+      ${short ? `<div class="short-note">⚠ 足りない（あと ${needOf(m)}${u}）</div>` : ""}</div>`;
+  }
+  function renderStock(){
+    const total = materials.length;
+    const reg = materials.filter(m => m.stock != null).length;
+    const shortN = materials.filter(isShort).length;
+    const uncN = materials.filter(m => !isCounted(m)).length;
+    $("stSum").innerHTML = `<span>在庫を入れた部材 ${reg}/${total}点</span><span class="${shortN ? "ng" : ""}">足りない ${shortN}点</span>`;
+    $("fAll").textContent = "すべて"; $("fShort").textContent = `足りないもの ${shortN}`; $("fUnc").textContent = `まだ数えてない ${uncN}`;
+    ["fAll", "fShort", "fUnc"].forEach(id => $(id).classList.toggle("on", ({ fAll: "all", fShort: "short", fUnc: "unc" })[id] === stockFilter));
+    const q = $("stockSearch").value.trim().toLowerCase();
+    const u = $("stUndo");
+    if(lastUse){ u.style.display = "flex"; u.innerHTML = `<span>直前: ${fmtDT(lastUse.t)} に在庫から引きました${lastUse.note ? "（" + esc(lastUse.note) + "）" : ""}</span><button type="button" id="stUndoBtn">取り消す</button>`;
+      $("stUndoBtn").addEventListener("click", askUndoUse); }
+    else u.style.display = "none";
+    const host = $("stockList"); host.innerHTML = "";
+    let any = false;
+    byCat().forEach(cat => {
+      let g = materials.filter(m => m.cat === cat);
+      if(stockFilter === "short") g = g.filter(isShort);
+      if(stockFilter === "unc") g = g.filter(m => !isCounted(m));
+      if(q) g = g.filter(m => matchQ(m, q));
+      if(!g.length) return;
+      any = true;
+      const open = (q || stockFilter !== "all") ? true : !!STOCK_OPEN[cat];
+      const sc = materials.filter(m => m.cat === cat && isShort(m)).length;
+      const el = document.createElement("div");
+      el.className = "cat" + (open ? " open" : "");
+      el.innerHTML = `<button class="cat-head" data-cat="${esc(cat)}"><span class="cat-name">${esc(cat)}</span>
+        ${sc ? `<span class="cat-badge show" style="background:var(--warn)">${sc}</span>` : ""}
+        <span class="cat-sub"><span class="cat-count">${g.length}点</span><svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="#16323d" stroke-width="3"><path d="M6 9l6 6 6-6"/></svg></span></button>
+        <div class="cat-body">${g.map(stockRowHtml).join("")}</div>`;
+      host.appendChild(el);
+    });
+    if(!any) host.innerHTML = `<div class="no-result">${stockFilter === "short" ? "足りないものはありません 👍" : "該当する部材がないよ。"}</div>`;
+  }
+  $("stockList").addEventListener("click", e => {
+    const head = e.target.closest(".cat-head");
+    if(head){ const c = head.dataset.cat; STOCK_OPEN[c] = !head.parentElement.classList.contains("open"); renderStock(); return; }
+    const h = e.target.closest("[data-hist]");
+    if(h){ openHistory(Number(h.dataset.hist)); return; }
+    const b = e.target.closest(".stp");
+    if(b){
+      const m = materials.find(x => x.id === Number(b.dataset.id)); if(!m) return;
+      const cur = m.stock == null ? 0 : m.stock;
+      setStock(m, b.dataset.act === "inc" ? cur + 1 : Math.max(0, cur - 1), "manual");
+      renderStock();
+    }
+  });
+  $("stockList").addEventListener("change", e => {
+    const t = e.target, m = materials.find(x => x.id === Number(t.dataset.id)); if(!m) return;
+    const raw = nfkc(t.value).trim();
+    if(t.classList.contains("stk-in")){
+      if(raw === ""){ setStock(m, null, "manual"); }
+      else{ const n = Number(raw); if(!isFinite(n) || n < 0){ t.value = m.stock == null ? "" : m.stock; return; } setStock(m, n, "manual"); }
+    }else if(t.classList.contains("ro-in")){
+      if(raw === "") delete m.reorder;
+      else{ const n = Number(raw); if(!isFinite(n) || n < 0){ t.value = m.reorder == null ? "" : m.reorder; return; } m.reorder = r1(n); }
+      saveState();
+    }
+    renderStock();
+  });
+  $("stockSearch").addEventListener("input", renderStock);
+  $("fAll").addEventListener("click", () => { stockFilter = "all"; renderStock(); });
+  $("fShort").addEventListener("click", () => { stockFilter = "short"; renderStock(); });
+  $("fUnc").addEventListener("click", () => { stockFilter = "unc"; renderStock(); });
+  $("stHist").addEventListener("click", () => openHistory(null));
+
+  // ---- 発注リスト ----
+  function orderText(){
+    const items = orderedItems().filter(isShort);
+    const rate = Number($("taxRate").value) || 0;
+    const t = new Date();
+    const lines = [`【発注リスト】${t.getFullYear()}-${p2(t.getMonth()+1)}-${p2(t.getDate())}`, ""];
+    let cur = "", sub = 0;
+    items.forEach(m => {
+      if(m.cat !== cur){ cur = m.cat; lines.push("■" + cur); }
+      const need = needOf(m), unit = unitOf(m), amt = unit * need;
+      sub += amt;
+      const nm = m.name + (m.size ? "（" + m.size + "）" : "") + (m.shop ? " ［" + m.shop + "］" : "");
+      const noRo = m.reorder == null ? "［発注点未設定→1で計算］" : "";
+      if(m.mode === "length") lines.push(`  ${nm}　不足 ${need}m × ${yenU(unit)}/m = ${yen(amt)}${m.packLen ? "（購入単位 " + m.packLen + "m）" : ""}${noRo}`);
+      else lines.push(`  ${nm}　不足 ${need} × ${yen(unit)} = ${yen(amt)}　(在庫${m.stock}/発注点${m.reorder == null ? "—" : m.reorder})${noRo}`);
+    });
+    const tax = Math.round(sub * rate / 100);
+    lines.push("", `合計(税別)　${yen(sub)}`, `消費税(${rate}%)　${yen(tax)}`, `合計(税込)　${yen(Math.round(sub) + tax)}`);
+    return { text: lines.join("\n"), n: items.length };
+  }
+  $("stOrder").addEventListener("click", () => {
+    const o = orderText();
+    if(o.n === 0){ notice("足りないものはありません", "在庫が発注点以下（または0）の部材がないので、発注リストは空です。"); return; }
+    const wrap = document.createElement("div");
+    wrap.innerHTML = `<div class="sh-hint">足りない ${o.n}点。不足 = 発注点 − 在庫（発注点ちょうど・未設定は1個で計算）。</div>
+      <textarea class="ordtxt" id="ordTxt" readonly></textarea>
+      <button class="btn-wide pri" id="ordCopy" type="button">テキストでコピー</button>`;
+    openSheet("発注リスト", wrap);
+    $("ordTxt").value = o.text;
+    $("ordCopy").addEventListener("click", () => {
+      const done = () => { $("ordCopy").textContent = "コピーしたよ"; };
+      if(navigator.clipboard) navigator.clipboard.writeText(o.text).then(done).catch(() => fallbackCopy(o.text, done));
+      else fallbackCopy(o.text, done);
+    });
+  });
+
+  // ---- 棚卸しモード ----
+  const cnt = { scope: "全部", idx: 0, done: false };
+  function cntItems(){ return orderedItems().filter(m => cnt.scope === "全部" || m.cat === cnt.scope); }
+  function firstUncounted(list){ const i = list.findIndex(m => !isCounted(m)); return i < 0 ? 0 : i; }
+  function startCount(){
+    const all = orderedItems();
+    if(all.length && all.every(isCounted)){
+      openDlg({ title: "ぜんぶ数え終わっています", html: "新しく棚卸しをはじめますか?（「まだ数えてない」に戻します。在庫の数はそのまま残ります）",
+        buttons: [{ t: "やめる", cls: "b-ghost" }, { t: "新しくはじめる", cls: "b-pri", fn: () => { invRound = nowIso(); saveState(); startCount(); } }] });
+      return;
+    }
+    cnt.scope = "全部"; cnt.done = false; cnt.idx = firstUncounted(cntItems());
+    $("cv").classList.add("open"); lockScroll(); renderCount();
+  }
+  function renderCount(){
+    const all = orderedItems(), list = cntItems();
+    const cdone = all.filter(isCounted).length;
+    const chips = ["全部", ...byCat()].map(c => {
+      const g = all.filter(m => c === "全部" || m.cat === c);
+      return `<button type="button" class="chip${cnt.scope === c ? " on" : ""}" data-scope="${esc(c)}">${esc(c)} ${g.filter(isCounted).length}/${g.length}</button>`;
+    }).join("");
+    let card;
+    if(cnt.done || !list.length){
+      const left = list.filter(m => !isCounted(m)).length;
+      card = `<div class="cv-card"><div class="cv-done">${left ? `「${esc(cnt.scope)}」の最後まで来ました。<br>まだ数えてない項目が ${left}点 あります。` : `「${esc(cnt.scope)}」は ぜんぶ数え終わりました 🎉`}</div>
+        <div class="cv-acts">${left ? `<button type="button" class="go" id="cvBack">まだの項目へ戻る</button>` : ""}<button type="button" class="sk" id="cvEnd">とじる</button></div></div>`;
+    }else{
+      const m = list[Math.min(cnt.idx, list.length - 1)], u = m.mode === "length" ? "m（メートル）" : "個";
+      const st = isCounted(m) ? `<div class="cv-state ok">✓ 最終カウント ${fmtDT(m.counted)}</div>`
+        : `<div class="cv-state un">まだ数えてない${m.counted ? "（前回 " + fmtDate(m.counted) + "）" : ""}</div>`;
+      card = `<div class="cv-card"><div class="cv-cat">${esc(m.cat)} ・ ${cnt.idx + 1}/${list.length}</div>
+        <div class="cv-name">${esc(dispName(m))}</div>${st}
+        <div class="cv-ctl"><button type="button" class="cv-btn" id="cvDec" aria-label="減らす">−</button>
+          <input type="text" id="cvNum" class="cv-num" inputmode="decimal" value="${m.stock == null ? 0 : m.stock}" aria-label="在庫数">
+          <button type="button" class="cv-btn" id="cvInc" aria-label="増やす">＋</button></div>
+        <div class="cv-unit">${u}</div><div class="cv-saved" id="cvSaved">${m.stock == null ? "" : "いまの在庫 " + m.stock}</div>
+        <div class="cv-acts"><button type="button" class="pv2" id="cvPrev">←</button><button type="button" class="sk" id="cvSkip">スキップ</button><button type="button" class="go" id="cvOk">✓ 数えた・次へ</button></div></div>`;
+    }
+    const rows = list.map((m, i) => `<div class="cv-li${!cnt.done && i === cnt.idx ? " cur" : ""}" data-i="${i}"><span class="a">${esc(dispName(m))}</span>
+      <span class="b ${isCounted(m) ? "ok" : "un"}">${isCounted(m) ? "✓ " + (m.stock == null ? 0 : m.stock) : "未"}</span></div>`).join("");
+    $("cv").innerHTML = `<div class="cv-top"><div class="cv-row1"><div class="cv-prog-txt">${cdone}/${all.length} 数えた</div><button type="button" class="cv-close" id="cvClose">✕ とじる</button></div>
+      <div class="bar"><i style="width:${all.length ? Math.round(cdone / all.length * 100) : 0}%"></i></div></div>
+      <div class="cv-in"><div class="chips">${chips}</div>${card}<div class="cv-list">${rows}</div></div>`;
+    const cur = $("cv").querySelector(".cv-li.cur"); if(cur && false) cur.scrollIntoView();
+  }
+  function cvCurrent(){ const l = cntItems(); return l[Math.min(cnt.idx, l.length - 1)]; }
+  function cvAdvance(){
+    const l = cntItems();
+    let j = -1;
+    for(let k = cnt.idx + 1; k < l.length; k++){ if(!isCounted(l[k])){ j = k; break; } }
+    if(j < 0){ cnt.done = true; } else cnt.idx = j;
+    renderCount(); $("cv").scrollTop = 0;
+  }
+  $("cv").addEventListener("click", e => {
+    const t = e.target;
+    const chip = t.closest("[data-scope]");
+    if(chip){ cnt.scope = chip.dataset.scope; cnt.done = false; cnt.idx = firstUncounted(cntItems()); renderCount(); return; }
+    const li = t.closest(".cv-li");
+    if(li){ cnt.idx = Number(li.dataset.i); cnt.done = false; renderCount(); $("cv").scrollTop = 0; return; }
+    const id = t.id || (t.closest("button") || {}).id;
+    if(id === "cvClose" || id === "cvEnd"){ $("cv").classList.remove("open"); lockScroll(); if(view === "stock") renderStock(); return; }
+    if(id === "cvBack"){ cnt.done = false; cnt.idx = firstUncounted(cntItems()); renderCount(); return; }
+    const m = cnt.done ? null : cvCurrent(); if(!m) return;
+    if(id === "cvInc" || id === "cvDec"){
+      const cur = readNum() ?? (m.stock == null ? 0 : m.stock);
+      setStock(m, id === "cvInc" ? cur + 1 : Math.max(0, cur - 1), "count");
+      renderCount();
+      $("cvSaved").textContent = "✓ 保存しました"; return;
+    }
+    if(id === "cvOk"){
+      const v = readNum(); const to = v != null ? v : (m.stock == null ? 0 : m.stock);
+      setStock(m, to, "count"); cvAdvance(); return;
+    }
+    if(id === "cvSkip"){ cvAdvance(); return; }
+    if(id === "cvPrev"){ if(cnt.idx > 0){ cnt.idx--; renderCount(); } }
+  });
+  function readNum(){
+    const i = $("cvNum"); if(!i) return null;
+    const raw = nfkc(i.value).trim(); if(raw === "") return null;
+    const n = Number(raw); return (isFinite(n) && n >= 0) ? n : null;
+  }
+  $("cv").addEventListener("change", e => {
+    if(e.target.id !== "cvNum") return;
+    const m = cvCurrent(); const v = readNum();
+    if(m && v != null){ setStock(m, v, "count"); renderCount(); $("cvSaved").textContent = "✓ 保存しました"; }
+    else renderCount();
+  });
+  $("stCount").addEventListener("click", startCount);
+
+  // ---- 使った分を在庫から引く ----
+  function openDeduct(){
+    const used = orderedItems().filter(m => m.qty > 0);
+    if(!used.length){ notice("使った部材がありません", "集計の画面で、使った部材の数量を入れてから押してね。"); return; }
+    const lines = used.map(m => {
+      const nm = esc(dispName(m)), u = unitTxt(m);
+      if(m.stock == null) return { m, skip: true, html: `<div class="dd-line skip"><span class="dn">${nm}</span><span class="dv">在庫未設定（引きません）</span></div>` };
+      const to = r1(m.stock - m.qty), neg = to < 0;
+      return { m, to, neg, html: `<div class="dd-line${neg ? " neg" : ""}" data-neg="${neg ? 1 : 0}"><span class="dn">${nm}</span><span class="dv">${m.stock}${u} → ${to}${u}${neg ? " ⚠" : ""}</span></div>` };
+    });
+    const negN = lines.filter(l => l.neg).length, skipN = lines.filter(l => l.skip).length, goN = lines.length - skipN;
+    const wrap = document.createElement("div");
+    wrap.innerHTML = `<div class="card"><h4>案件名・メモ（なくてもOK）</h4><input class="job-in" id="jobNote" type="text" placeholder="例: ○○様邸 HW設置" maxlength="60"></div>
+      <div class="card"><h4>引く内容（在庫 → 引いたあと）</h4>${lines.map(l => l.html).join("")}
+      ${negN ? `<div class="dlg-warn" id="negWarn">⚠ 在庫が足りず、マイナスになる項目が ${negN}件 あります。数え間違い・入れ忘れがないか確認してね。</div>
+      <label class="chk"><input type="checkbox" id="clamp">マイナスになる分は 0 で止める</label>` : ""}
+      ${skipN ? `<div class="sh-hint" style="margin-top:9px;">在庫を入れていない ${skipN}件は引きません（在庫タブで数を入れると引けます）。</div>` : ""}</div>
+      <button class="btn-wide pri" id="ddGo" type="button"${goN ? "" : " disabled"}>${negN ? "⚠ マイナスを承知で " : ""}${goN}件を在庫から引く</button>
+      <button class="btn-wide sub" id="ddNo" type="button">やめる</button>`;
+    openSheet("使った分を在庫から引く", wrap);
+    $("ddNo").addEventListener("click", closeSheet);
+    $("ddGo").addEventListener("click", () => {
+      const note = $("jobNote").value.trim(), clamp = !!($("clamp") && $("clamp").checked);
+      const job = String(Date.now());
+      const items = [];
+      lines.forEach(l => {
+        if(l.skip) return;
+        const m = l.m, from = m.stock, to = clamp ? Math.max(0, l.to) : l.to;
+        m.stock = to; items.push({ id: m.id, from, to, qty: m.qty });
+        logStock(m, "use", from, to, note || "", job);
+      });
+      lastUse = { j: job, t: nowIso(), note, items, qtyReset: [] };
+      saveState(); closeSheet();
+      openDlg({ title: "在庫から引きました", html: `${items.length}件を引きました。<br>この案件の数量（使った数）を 0 に戻しますか?`,
+        buttons: [{ t: "そのまま", cls: "b-ghost", fn: fin }, { t: "0に戻す", cls: "b-pri", fn: () => {
+          lastUse.qtyReset = materials.filter(m => m.qty > 0).map(m => ({ id: m.id, qty: m.qty }));
+          materials.forEach(m => { m.qty = 0; }); saveState(); fin(); } }] });
+      function fin(){ render(); if(view === "stock") renderStock(); showUndo("在庫から引きました（" + items.length + "件）", undoUse); }
+    });
+  }
+  function askUndoUse(){
+    if(!lastUse) return;
+    openDlg({ title: "直前の引き算を取り消す?", html: `${fmtDT(lastUse.t)}${lastUse.note ? "（" + esc(lastUse.note) + "）" : ""} の ${lastUse.items.length}件を元の在庫に戻します。`,
+      buttons: [{ t: "やめる", cls: "b-ghost" }, { t: "取り消す", cls: "b-pri", fn: undoUse }] });
+  }
+  function undoUse(){
+    if(!lastUse) return;
+    lastUse.items.forEach(it => {
+      const m = materials.find(x => x.id === it.id); if(!m) return;
+      m.stock = r1((m.stock == null ? 0 : m.stock) + (it.from - it.to));
+    });
+    (lastUse.qtyReset || []).forEach(q => { const m = materials.find(x => x.id === q.id); if(m && !m.qty) m.qty = q.qty; });
+    stockLog = stockLog.filter(e => e.j !== lastUse.j);
+    lastUse = null; saveState(); render(); if(view === "stock") renderStock();
+    showUndo("取り消しました", null, 3000);
+  }
+  $("deductBtn").addEventListener("click", openDeduct);
+
+  // ---- 重複をまとめる ----
+  const normKey = m => nfkc(m.name).replace(/異形/g, "異型").replace(/[\s　]+/g, "").toLowerCase() + "|" + nfkc(m.size).replace(/異形/g, "異型").replace(/\s+/g, "").toLowerCase();
+  const KNOWN_PAIRS = [[111, 113], [109, 110], [63, 115], [11, 112], [34, 35]];
+  const pairKey = (a, b) => Math.min(a, b) + "-" + Math.max(a, b);
+  let manualGroups = [];   // 手動で選んだ組(id配列)
+  let mergeUndoSnap = null;
+  function findGroups(){
+    const groups = [], seen = new Set();
+    const map = {};
+    materials.forEach(m => { (map[normKey(m)] = map[normKey(m)] || []).push(m); });
+    Object.values(map).forEach(g => { if(g.length > 1){ groups.push({ ids: g.map(m => m.id), kind: "auto" }); g.forEach(m => seen.add(m.id)); } });
+    KNOWN_PAIRS.forEach(([a, b]) => {
+      const A = materials.find(m => m.id === a), B = materials.find(m => m.id === b);
+      if(!A || !B) return;
+      if(groups.some(g => g.ids.includes(a) && g.ids.includes(b))) return;
+      groups.push({ ids: [a, b], kind: "maybe" });
+    });
+    return groups.filter(g => !(g.ids.length === 2 && dupIgnore.includes(pairKey(g.ids[0], g.ids[1]))));
+  }
+  function mergeInfo(m){
+    return `単価 ${yen(m.price)}${m.mode === "length" ? "(購入)" : ""} ／ 使用 ${m.qty}${unitTxt(m)} ／ 在庫 ${m.stock == null ? "未" : m.stock}${unitTxt(m)}`;
+  }
+  function groupCard(g, gi, manual){
+    const items = g.ids.map(id => materials.find(m => m.id === id)).filter(Boolean);
+    if(items.length < 2) return "";
+    const tag = manual ? `<span class="tag maybe">自分で選んだ組</span>` : g.kind === "auto" ? `<span class="tag auto">名前と規格が同じ</span>` : `<span class="tag maybe">同じかも（要確認）</span>`;
+    return `<div class="card mg" data-gi="${gi}" data-manual="${manual ? 1 : 0}"><h4>${tag}</h4>
+      ${items.map((m, i) => `<label class="mrow${i === 0 ? " keep" : ""}"><input type="radio" name="keep-${manual ? "m" : "a"}${gi}" value="${m.id}" ${i === 0 ? "checked" : ""}>
+        <div class="mi">${esc(dispName(m))}<div class="ms">${esc(m.cat)}（No.${m.id}）<br>${mergeInfo(m)}</div></div></label>`).join("")}
+      <div class="sh-hint" style="margin:8px 0 0;">丸を付けた方を「残す」。もう片方は消えて、使用数と在庫が残す方に足されます。</div>
+      <div class="btn-pair"><button class="btn-wide pri mg-go" type="button">まとめる…</button><button class="btn-wide sub mg-no" type="button">別物だった</button></div></div>`;
+  }
+  function openMerge(){
+    const groups = findGroups();
+    const wrap = document.createElement("div");
+    const opts = cat => "";
+    const optList = materials.map(m => `<option value="${m.id}">${esc(dispName(m))}</option>`).join("");
+    wrap.innerHTML = `<div class="sh-hint">同じ部材が別々に入っているものを1つにまとめます。<b>自動ではまとめません</b>。確認してから実行、8秒間は元に戻せます。</div>
+      <div id="mgAuto">${groups.length ? groups.map((g, i) => groupCard(g, i, false)).join("") : `<div class="card sh-hint">自動で見つかった重複はありません。</div>`}</div>
+      <div class="card pairpick"><h4>自分で2つ選んでまとめる</h4>
+        <div class="field"><label>1つめ（名前の一部で絞り込み）</label><input type="text" id="pkF1" placeholder="例: ソケット"><select id="pk1"><option value="">選んでください</option>${optList}</select></div>
+        <div class="field"><label>2つめ</label><input type="text" id="pkF2" placeholder="例: ソケット"><select id="pk2"><option value="">選んでください</option>${optList}</select></div>
+        <button class="btn-wide sub" id="pkGo" type="button">この2つを比べる</button></div>
+      <div id="mgManual"></div>`;
+    openSheet("重複をまとめる", wrap);
+    const bindCards = () => {
+      wrap.querySelectorAll(".mg").forEach(card => {
+        const gi = Number(card.dataset.gi), manual = card.dataset.manual === "1";
+        const g = manual ? { ids: manualGroups[gi] } : groups[gi]; if(!g) return;
+        card.querySelectorAll('input[type=radio]').forEach(r => r.addEventListener("change", () => {
+          card.querySelectorAll(".mrow").forEach(x => x.classList.toggle("keep", x.querySelector("input").checked));
+        }));
+        card.querySelector(".mg-go").addEventListener("click", () => {
+          const keepId = Number(card.querySelector("input:checked").value);
+          confirmMerge(keepId, g.ids.filter(id => id !== keepId));
+        });
+        card.querySelector(".mg-no").addEventListener("click", () => {
+          if(manual){ manualGroups.splice(gi, 1); } else if(g.ids.length === 2){ dupIgnore.push(pairKey(g.ids[0], g.ids[1])); saveState(); }
+          openMerge();
+        });
+      });
+    };
+    $("mgManual").innerHTML = manualGroups.map((g, i) => groupCard({ ids: g }, i, true)).join("");
+    bindCards();
+    [["pkF1", "pk1"], ["pkF2", "pk2"]].forEach(([f, s]) => $(f).addEventListener("input", () => {
+      const q = nfkc($(f).value).toLowerCase().trim();
+      [...$(s).options].forEach(o => { o.hidden = !!q && !!o.value && !nfkc(o.textContent).toLowerCase().includes(q); });
+    }));
+    $("pkGo").addEventListener("click", () => {
+      const a = Number($("pk1").value), b = Number($("pk2").value);
+      if(!a || !b){ notice("2つ選んでね", "1つめと2つめの部材を選んでから押してね。"); return; }
+      if(a === b){ notice("同じ部材です", "別々の部材を2つ選んでね。"); return; }
+      manualGroups.push([a, b]); openMerge();
+    });
+  }
+  function confirmMerge(keepId, removeIds){
+    const keep = materials.find(m => m.id === keepId);
+    const rem = removeIds.map(id => materials.find(m => m.id === id)).filter(Boolean);
+    if(!keep || !rem.length) return;
+    if(rem.some(r => r.mode !== keep.mode)){ notice("まとめられません", "数え方（個数／メートル）が違う部材はまとめられません。先に数え方をそろえてね。"); return; }
+    const li = rem.map(r => `<li><span class="nm">「${esc(dispName(r))}」</span>を削除（使用 ${r.qty}${unitTxt(r)} ／ 在庫 ${r.stock == null ? "未" : r.stock}${unitTxt(r)}）</li>`).join("");
+    const sumQ = r1(keep.qty + rem.reduce((s, r) => s + r.qty, 0));
+    const anyStock = keep.stock != null || rem.some(r => r.stock != null);
+    const sumS = r1((keep.stock || 0) + rem.reduce((s, r) => s + (r.stock || 0), 0));
+    openDlg({ title: "まとめる確認",
+      html: `残す: <span class="nm">「${esc(dispName(keep))}」</span><ul>${li}</ul>
+        <div class="dlg-warn" style="background:#e3f4f4;color:var(--accent-deep);">まとめたあと: 使用 ${sumQ}${unitTxt(keep)} ／ 在庫 ${anyStock ? sumS : "未"}${unitTxt(keep)}</div>
+        <div style="margin-top:9px;font-size:12px;color:var(--ink-soft);">単価は残す方のまま。まとめたあと約8秒間は「元に戻す」ができます。</div>`,
+      buttons: [{ t: "やめる", cls: "b-ghost" }, { t: "まとめる", cls: "b-pri", fn: () => doMerge(keepId, removeIds) }] });
+  }
+  function doMerge(keepId, removeIds){
+    const keep = materials.find(m => m.id === keepId);
+    mergeUndoSnap = { materials: JSON.parse(JSON.stringify(materials)), log: JSON.parse(JSON.stringify(stockLog)), manual: JSON.parse(JSON.stringify(manualGroups)) };
+    removeIds.forEach(id => {
+      const r = materials.find(m => m.id === id); if(!r) return;
+      keep.qty = r1(keep.qty + r.qty);
+      if(r.stock != null){
+        const from = keep.stock == null ? null : keep.stock, to = r1((keep.stock || 0) + r.stock);
+        keep.stock = to;
+        logStock(keep, "merge", from, to, "「" + dispName(r) + "」をまとめた");
+      }
+      if(keep.reorder == null && r.reorder != null) keep.reorder = r.reorder;
+      { const extra = [...(r.al || [])]; if(skey(r.name + (r.size || "")) !== skey(keep.name + (keep.size || ""))) extra.push(dispName(r));
+        const al = normAliases([...(keep.al || []), ...extra], hayOf(keep).name); if(al.length) keep.al = al; else delete keep.al;
+        if(!keep.shop && r.shop) keep.shop = r.shop; if(r.cu) keep.cu = 1; }
+      if(r.counted && (!keep.counted || r.counted > keep.counted)) keep.counted = r.counted;
+      stockLog.forEach(e => { if(e.id === r.id) e.id = keep.id; });
+      materials = materials.filter(m => m.id !== r.id);
+    });
+    manualGroups = manualGroups.filter(g => !g.some(id => removeIds.includes(id)));
+    saveState(); render(); if(view === "stock") renderStock();
+    openMerge();
+    showUndo(`まとめました（${removeIds.length}件を削除）`, () => {
+      const s = mergeUndoSnap; if(!s) return;
+      materials = s.materials; stockLog = s.log; manualGroups = s.manual;
+      saveState(); render(); if(view === "stock") renderStock();
+      if($("sheet").classList.contains("open") && $("sheetTitle").textContent === "重複をまとめる") openMerge();
+    });
+  }
+  $("mergeBtn").addEventListener("click", () => { manualGroups = []; openMerge(); });
+
+  // =====================================================================
+  // v0.9 追加: 別名 / 購入先 / 入出庫ファイルの取り込み
+  // =====================================================================
+  let imports = [];      // 取り込み済みファイル [{id,h,t,memo,n}]（二重取り込み防止）
+  let lastImp = null;    // 直前の取り込み（取り消し用・リロードしても残す）
+  const SHOP_CHIPS = ["モノタロウ", "配管ドットコム", "ホームセンター", "その他"];
+
+  // ---- 検索用の正規化: 全角半角・カタカナひらがな・大小文字・異形/異型・空白や記号 ----
+  const hira = s => s.replace(/[\u30a1-\u30f6]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x60));
+  const skey = s => hira(nfkc(String(s == null ? "" : s)).toLowerCase()).replace(/異形/g, "異型").replace(/[×✕✖*]/g, "x").replace(/[\s\u3000・\-_\/]/g, "");
+  const hayCache = new WeakMap();
+  function hayOf(m){
+    const sig = (m.name || "") + "\u0001" + (m.size || "") + "\u0001" + (m.al || []).join("\u0002");
+    let c = hayCache.get(m);
+    if(!c || c.sig !== sig){
+      c = { sig, name: skey((m.name || "") + (m.size || "")), nm: skey(m.name || ""), al: (m.al || []).map(skey) };
+      c.all = [c.name, ...c.al].join("|");
+      hayCache.set(m, c);
+    }
+    return c;
+  }
+  const qTokens = q => nfkc(q || "").split(/\s+/).filter(Boolean).map(skey).filter(Boolean);
+  function matchQ(m, q){
+    const toks = qTokens(q); if(!toks.length) return true;
+    const h = hayOf(m).all;
+    return toks.every(t => h.includes(t));
+  }
+  // 別名だけでヒットしたときに「別名: ○○」と見せる
+  function aliasHint(m, q){
+    if(!q || !m.al || !m.al.length) return "";
+    const toks = qTokens(q); if(!toks.length) return "";
+    const c = hayOf(m);
+    if(toks.every(t => c.name.includes(t))) return "";
+    const hit = m.al.filter((a, i) => toks.some(t => c.al[i].includes(t)));
+    return hit.join("・");
+  }
+  function normAliases(list, selfKey){
+    const seen = new Set(selfKey ? [selfKey] : []), out = [];
+    (list || []).forEach(a => {
+      a = String(a == null ? "" : a).trim().replace(/[\s\u3000]+/g, " ").slice(0, 40);
+      const k = skey(a);
+      if(a && k && !seen.has(k)){ seen.add(k); out.push(a); }
+    });
+    return out.slice(0, 20);
+  }
+  function applyMeta(m, d){
+    const al = normAliases(d.al, hayOf(m).name);
+    if(al.length) m.al = al; else delete m.al;
+    const sh = (d.shop || "").trim().slice(0, 30);
+    if(sh) m.shop = sh; else delete m.shop;
+  }
+
+  // ---- 別名・購入先 エディタ（編集パネル／追加フォーム／在庫タブのダイアログで共用）----
+  function metaEditor(init){
+    let al = (init.al || []).slice();
+    const node = document.createElement("div"); node.className = "meta-ed";
+    node.innerHTML = `<div class="me-l">別名（呼び方・略称。検索や入出庫ファイルの名前合わせに使います）</div>
+      <div class="me-chips"></div>
+      <div class="me-add"><input type="text" class="me-in" placeholder="例: ヘルール（複数は「、」区切り）" autocomplete="off" enterkeyhint="done" aria-label="別名を入力"><button type="button" class="me-addb">追加</button></div>
+      <div class="me-l" style="margin-top:11px;">購入先（メモ）</div>
+      <input type="text" class="me-shop" placeholder="例: ホームセンター" maxlength="30" autocomplete="off" aria-label="購入先">
+      <div class="me-sc"></div>`;
+    const chips = node.querySelector(".me-chips"), inp = node.querySelector(".me-in"), shop = node.querySelector(".me-shop"), sc = node.querySelector(".me-sc");
+    shop.value = init.shop || "";
+    const drawAl = () => { chips.innerHTML = al.length ? al.map((a, i) => `<span class="me-al">${esc(a)}<button type="button" data-rm="${i}" aria-label="${esc(a)}を消す">×</button></span>`).join("") : `<span class="me-none">まだありません</span>`; };
+    const drawSc = () => { sc.innerHTML = SHOP_CHIPS.map(s => `<button type="button" class="me-sp${shop.value.trim() === s ? " on" : ""}" data-s="${esc(s)}">${esc(s)}</button>`).join(""); };
+    const commit = () => { al = normAliases([...al, ...inp.value.split(/[、,，\n]/)]); inp.value = ""; drawAl(); };
+    node.addEventListener("click", e => {
+      const rm = e.target.closest("[data-rm]"); if(rm){ al.splice(Number(rm.dataset.rm), 1); drawAl(); return; }
+      if(e.target.closest(".me-addb")){ commit(); inp.focus(); return; }
+      const s = e.target.closest("[data-s]"); if(s){ shop.value = shop.value.trim() === s.dataset.s ? "" : s.dataset.s; drawSc(); }
+    });
+    inp.addEventListener("keydown", e => { if(e.key === "Enter"){ e.preventDefault(); commit(); } });
+    shop.addEventListener("input", drawSc);
+    drawAl(); drawSc();
+    return { node, get(){ commit(); return { al: al.slice(), shop: shop.value.trim().slice(0, 30) }; } };
+  }
+  let addMeta = metaEditor({});
+  $("newMeta").appendChild(addMeta.node);
+  function resetAddMeta(){ const n = addMeta.node; addMeta = metaEditor({}); n.replaceWith(addMeta.node); }
+
+  // 在庫タブの ✎ から別名・購入先だけを編集
+  function openMeta(id){
+    const m = materials.find(x => x.id === id); if(!m) return;
+    const ed = metaEditor({ al: m.al, shop: m.shop });
+    const wrap = document.createElement("div");
+    openSheet("別名・購入先: " + dispName(m), wrap);
+    wrap.innerHTML = `<div class="card"></div><div class="btn-pair"><button class="btn-wide" type="button" id="mtCancel">やめる</button><button class="btn-wide pri" type="button" id="mtSave">保存</button></div>`;
+    wrap.firstChild.appendChild(ed.node);
+    wrap.querySelector("#mtCancel").addEventListener("click", closeSheet);
+    wrap.querySelector("#mtSave").addEventListener("click", () => {
+      applyMeta(m, ed.get()); saveState(); closeSheet(); renderStock(); render();
+    });
+  }
+  $("stockList").addEventListener("click", e => { const b = e.target.closest("[data-meta]"); if(b) openMeta(Number(b.dataset.meta)); });
+
+  // =====================================================================
+  // 入出庫ファイル (hw-parts-ops v1)
+  // =====================================================================
+  const KIND_MAP = { use: "use", "出庫": "use", "使用": "use", count: "count", "棚卸し": "count", "棚卸": "count", add: "add", "入庫": "add", "購入": "add",
+    newitem: "newItem", "新規": "newItem", alias: "alias", "別名": "alias" };
+  const KIND_LBL = { use: "使用", count: "棚卸し", add: "入庫", newItem: "新規", alias: "別名" };
+  const numOf = v => {
+    if(typeof v === "number") return v;
+    if(typeof v === "string" && v.trim() !== "") return Number(nfkc(v).replace(/[,，\s]/g, ""));
+    return NaN;
+  };
+  const listOf = v => Array.isArray(v) ? v.map(x => String(x == null ? "" : x)) : (typeof v === "string" ? v.split(/[、,，\n]/) : []);
+  function hashOps(o){
+    const s = JSON.stringify([o.date || "", o.memo || "", o.ops]);
+    let h = 5381; for(let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+    return (h >>> 0).toString(36) + "." + s.length;
+  }
+  // ファイル全体の検査。失敗なら {err} を返す（データには触らない）
+  function parseOps(text, size){
+    if(size > 1000000) return { err: "ファイルが大きすぎます（1MBまで）。入出庫ファイルではなさそうです。" };
+    let o;
+    try{ o = JSON.parse(String(text).replace(/^\uFEFF/, "")); }
+    catch(e){ return { err: "ファイルの中身を読み取れませんでした（JSONの形式が正しくありません）。葵ちゃんに作り直してもらってね。" }; }
+    if(!o || typeof o !== "object" || Array.isArray(o)) return { err: "入出庫ファイルではありません（中身が { … } の形になっていません）。" };
+    if(Array.isArray(o.materials)) return { err: "これはバックアップのファイルです。入出庫ファイルではありません。バックアップは「⬆️ 読み込む」から入れてね。" };
+    if(o.type !== "hw-parts-ops") return { err: "入出庫ファイルではありません（type が \"hw-parts-ops\" になっていません）。" };
+    const ver = Number(o.version);
+    if(ver > 1) return { err: "このファイルは新しい形式（version " + esc(String(o.version)) + "）です。アプリを新しい版に更新してから取り込んでね。" };
+    if(ver !== 1) return { err: "version が 1 になっていません。ファイルを作り直してもらってね。" };
+    if(o.date != null && !(typeof o.date === "string" && /^\d{4}-\d{2}-\d{2}/.test(o.date))) return { err: "date の書き方が正しくありません（例: 2026-10-26）。" };
+    if(o.id != null && !((typeof o.id === "string" || typeof o.id === "number") && String(o.id).length <= 60)) return { err: "ファイルID（id）の書き方が正しくありません（60文字までの文字列）。" };
+    if(!Array.isArray(o.ops)) return { err: "ops（入出庫の一覧）がありません。" };
+    if(!o.ops.length) return { err: "ops が空です。取り込む内容がありません。" };
+    if(o.ops.length > 300) return { err: "ops が多すぎます（300件まで）。分けて作ってもらってね。" };
+    const memoRaw = o.memo != null ? o.memo : o.case;
+    return { file: { id: o.id != null && String(o.id) !== "" ? String(o.id) : null, date: o.date || "", memo: typeof memoRaw === "string" ? memoRaw.trim().slice(0, 60) : "", ops: o.ops, hash: hashOps(o) } };
+  }
+  // 名前(+size)から既存部材を探す。id優先。
+  function resolveItem(op){
+    if(op.id != null && op.id !== ""){
+      const n = numOf(op.id), m = Number.isInteger(n) ? materials.find(x => x.id === n) : null;
+      return m ? { m, how: "id" } : { err: "No." + esc(String(op.id)) + " の部材が見つかりません（IDを確認）" };
+    }
+    const nm = typeof op.name === "string" ? op.name.trim() : "";
+    if(!nm) return { err: "id も名前（name）もありません" };
+    const key = skey(nm), sz = op.size != null && String(op.size).trim() ? skey(String(op.size)) : "";
+    const sizeOk = m => !sz || skey(m.size || "") === sz;
+    const ex = materials.filter(m => { const c = hayOf(m); return c.name === key || c.name === key + sz || (sizeOk(m) && (c.nm === key || c.al.includes(key))); });
+    const lbl = a => a.slice(0, 3).map(m => "No." + m.id + "「" + esc(dispName(m)) + "」").join("、") + (a.length > 3 ? " ほか" : "");
+    if(ex.length === 1) return { m: ex[0], how: "exact" };
+    if(ex.length > 1) return { err: "「" + esc(nm) + "」に当てはまる部材が複数あります（" + lbl(ex) + "）。id で指定してね" };
+    const part = materials.filter(m => sizeOk(m) && hayOf(m).all.includes(key));
+    if(part.length === 1) return { m: part[0], how: "fuzzy" };
+    if(part.length > 1) return { err: "「" + esc(nm) + "」に近い部材が複数あります（" + lbl(part) + "）。id で指定してね" };
+    return { err: "「" + esc(nm) + "」が見つかりません（名前か id を確認）" };
+  }
+  function planNew(r, op){
+    const bad = t => { r.st = "err"; r.msgs.push({ c: "e", t }); return r; };
+    const name = typeof op.name === "string" ? op.name.trim().replace(/[\s\u3000]+/g, " ") : "";
+    if(!name) return bad("新規部材の名前（name）がありません");
+    if(name.length > 60) return bad("名前が長すぎます（60字まで）");
+    const price = numOf(op.price);
+    if(!(Number.isInteger(price) && price >= 0)) return bad("単価（price）は 0 以上の整数（円・税別）で指定してね");
+    const unit = nfkc(String(op.unit == null ? "" : op.unit)).trim().toLowerCase();
+    const isLen = ["m", "メートル", "length"].includes(unit);
+    let packLen = 0;
+    if(isLen){
+      packLen = numOf(op.packLen != null ? op.packLen : op.len);
+      if(!(packLen > 0)) return bad("メートル品は購入長（packLen・m）が必要です");
+      packLen = r1(packLen);
+    }
+    const stRaw = op.stock != null ? op.stock : op.qty;
+    let stock = null;
+    if(stRaw != null){ stock = numOf(stRaw); if(!(stock >= 0)) return bad("初期在庫（stock）は 0 以上の数で指定してね"); stock = r1(stock); }
+    let reorder = null;
+    if(op.reorder != null){ reorder = numOf(op.reorder); if(!(reorder >= 0)) return bad("発注点（reorder）は 0 以上の数で指定してね"); reorder = r1(reorder); }
+    const size = op.size != null ? String(op.size).trim().slice(0, 30) : "";
+    const cat = typeof op.cat === "string" && op.cat.trim() ? op.cat.trim().slice(0, 20) : "その他";
+    const nw = { cat, name, size, mode: isLen ? "length" : "piece", price, packLen, stock, reorder,
+      shop: typeof op.shop === "string" ? op.shop.trim().slice(0, 30) : "", al: normAliases(listOf(op.aliases), skey(name + size)) };
+    r.nw = nw;
+    if(!byCat().includes(cat) && !CAT_ORDER.includes(cat)) r.msgs.push({ c: "w", t: "新しいカテゴリ「" + esc(cat) + "」を作ります" });
+    const k = skey(name + size);
+    const dup = materials.filter(m => { const c = hayOf(m); return c.name === k || c.al.includes(k); });
+    if(dup.length){ r.st = "warn"; r.defOn = false; r.msgs.push({ c: "w", t: "同じ名前の部材がすでにあります: No." + dup[0].id + "「" + esc(dispName(dup[0])) + "」。それでも新しく作るならチェックを入れてね" }); }
+    return r;
+  }
+  function planRow(op, i, seenNew){
+    const r = { i, op, kind: "", st: "ok", msgs: [], m: null, defOn: true };
+    const bad = t => { r.st = "err"; r.msgs.push({ c: "e", t }); return r; };
+    if(!op || typeof op !== "object" || Array.isArray(op)) return bad("この行の書き方が正しくありません");
+    const kind = KIND_MAP[nfkc(String(op.kind == null ? "" : op.kind)).trim().toLowerCase()];
+    if(!kind) return bad("kind が正しくありません（use / count / add / newItem / alias のどれか）");
+    r.kind = kind;
+    if(kind === "newItem"){
+      planNew(r, op);
+      if(r.nw){ const k = skey(r.nw.name + r.nw.size); if(seenNew.has(k)){ r.st = "warn"; r.defOn = false; r.msgs.push({ c: "w", t: "このファイル内に同じ新規部材があります" }); } seenNew.add(k); }
+      return r;
+    }
+    const rs = resolveItem(op);
+    if(rs.err) return bad(rs.err);
+    const m = r.m = rs.m;
+    if(rs.how === "fuzzy"){ r.st = "warn"; r.defOn = false; r.msgs.push({ c: "w", t: "名前から推定しました。合っていればチェックを入れてね" }); }
+    if(kind !== "alias"){
+      const q = numOf(op.qty);
+      if(kind === "count" ? !(q >= 0) : !(q > 0)) return bad(kind === "count" ? "数量（qty）は 0 以上の数で指定してね" : "数量（qty）は 0 より大きい数で指定してね");
+      r.qty = r1(q);
+    }
+    const alAll = normAliases(listOf(op.aliases), hayOf(m).name);
+    r.alAdd = alAll.filter(a => !hayOf(m).al.includes(skey(a)));
+    if(kind === "alias" && !alAll.length && !(typeof op.shop === "string" && op.shop.trim())) return bad("alias には aliases か shop が必要です");
+    const shop = typeof op.shop === "string" ? op.shop.trim().slice(0, 30) : "";
+    if(shop){
+      if(!m.shop) r.shopSet = shop;
+      else if(skey(m.shop) !== skey(shop)){
+        if(op.setShop === true) r.shopSet = shop;
+        else r.msgs.push({ c: "", t: "購入先は「" + esc(m.shop) + "」のままにします（変えるなら setShop:true）" });
+      }
+    }
+    if(op.price != null && op.price !== "") r.msgs.push({ c: "", t: "単価（price）は新規部材だけに使います。この部材の単価は変えません" });
+    if(typeof op.note === "string" && op.note.trim()) r.note = op.note.trim().slice(0, 60);
+    return r;
+  }
+  function buildPlan(file){
+    const seenNew = new Set();
+    return file.ops.map((op, i) => planRow(op, i, seenNew));
+  }
+  // チェックの入っている行だけを順に当てはめて before→after を計算（同じ部材が複数行あっても連続して計算）
+  function computeRows(rows, on, clamp){
+    const sim = new Map();
+    const cur = m => sim.has(m.id) ? sim.get(m.id) : (m.stock == null ? null : m.stock);
+    rows.forEach(r => {
+      r.eff = false; r.from = r.to = undefined; r.neg = false; r.noStock = false;
+      if(r.st === "err" || !on[r.i]) return;
+      r.eff = true;
+      if(r.kind === "newItem" || r.kind === "alias") return;
+      const c = cur(r.m);
+      if(r.kind === "use"){
+        if(c == null){ r.noStock = true; return; }
+        let to = r1(c - r.qty);
+        if(to < 0){ r.neg = true; if(clamp) to = 0; }
+        r.from = c; r.to = to;
+      }else if(r.kind === "count"){ r.from = c; r.to = r.qty; }
+      else { r.from = c; r.to = r1((c || 0) + r.qty); }
+      sim.set(r.m.id, r.to);
+    });
+  }
+  const fmtQ = (v, m) => v == null ? "未設定" : v + unitTxt(m);
+  function rowHtml(r, on){
+    const dis = r.st === "err";
+    let name, val = "";
+    if(r.kind === "newItem" && r.nw){
+      const n = r.nw;
+      name = esc(n.name) + (n.size ? `<span class="size-tag" style="margin-left:5px;">${esc(n.size)}</span>` : "");
+      val = `<div class="op-v">新規作成 ・ ${esc(n.cat)} ・ ${n.mode === "length" ? "購入 " + n.packLen + "m で ¥" + n.price + "（税別）" : "¥" + n.price + "（税別）"}${n.stock != null ? " ・ 初期在庫 " + n.stock + (n.mode === "length" ? "m" : "個") : ""}</div>`;
+      const ex = []; if(n.shop) ex.push("購入先「" + esc(n.shop) + "」"); if(n.al.length) ex.push("別名: " + n.al.map(esc).join("・"));
+      if(ex.length) val += `<div class="op-m">${ex.join(" ／ ")}</div>`;
+    }else if(r.m){
+      name = esc(dispName(r.m)) + (r.how === "id" ? "" : `<span class="shop" style="margin-left:5px;">No.${r.m.id}</span>`);
+      if(r.eff && r.to !== undefined) val = `<div class="op-v${r.neg ? " neg" : ""}">${r.kind === "use" ? "−" + r.qty + "　" : r.kind === "add" ? "＋" + r.qty + "　" : ""}${fmtQ(r.from, r.m)} → ${fmtQ(r.to, r.m)}${r.neg ? "　⚠ マイナス" : ""}</div>`;
+      else if(r.kind !== "alias" && r.st !== "err") val = `<div class="op-v">${r.kind === "use" ? "−" : r.kind === "add" ? "＋" : "数えた値 "}${r.qty}${unitTxt(r.m)}${r.noStock ? "" : ""}</div>`;
+      const ex = [];
+      if(r.alAdd && r.alAdd.length) ex.push("別名を覚える: " + r.alAdd.map(esc).join("・"));
+      if(r.shopSet) ex.push("購入先「" + esc(r.shopSet) + "」" + (r.m.shop ? "に変更" : "を記録"));
+      if(ex.length) val += `<div class="op-m">${ex.join(" ／ ")}</div>`;
+      if(r.noStock && r.eff) val += `<div class="op-m w">在庫が未設定なので引けません（在庫は変えません）</div>`;
+    }else name = esc(String(r.op && (r.op.name != null ? r.op.name : r.op.id != null ? "No." + r.op.id : "（不明）")));
+    const msgs = r.msgs.map(x => `<div class="op-m ${x.c}">${x.c === "e" ? "✖ " : x.c === "w" ? "⚠ " : ""}${x.t}</div>`).join("");
+    return `<label class="op-row ${r.st}${on[r.i] ? "" : " off"}"><input type="checkbox" class="op-ck" data-i="${r.i}"${on[r.i] ? " checked" : ""}${dis ? " disabled" : ""} aria-label="取り込む">
+      <div class="op-b"><div class="op-top"><span class="ty ${r.kind || ""}">${KIND_LBL[r.kind] || "？"}</span><span class="op-nm">${name}</span></div>${val}${msgs}</div></label>`;
+  }
+
+  function openOpsPreview(file, force){
+    const rows = buildPlan(file), on = {};
+    rows.forEach(r => { on[r.i] = r.st !== "err" && r.defOn; });
+    let clamp = false;
+    const wrap = document.createElement("div");
+    openSheet("入出庫ファイルの取り込み", wrap);
+    wrap.innerHTML = `<div class="card ops-head">
+        ${file.memo ? `<div>案件: <b>${esc(file.memo)}</b></div>` : `<div style="opacity:.7;">案件メモなし</div>`}
+        ${file.date ? `<div>日付: ${esc(file.date.slice(0, 10))}</div>` : ""}
+        ${file.id ? `<div>ファイルID: ${esc(file.id)}</div>` : ""}
+        ${force ? `<div class="op-m e">✖ このファイルは取り込み済みです。もう一度入れると二重に反映されます。</div>` : ""}
+        <div class="sh-hint" style="margin-top:6px;">内容を確認して、よければ下の「取り込む」を押してね。取り込んだ後も8秒間は取り消せます。</div></div>
+      <div class="ops-sum" id="opSum"></div>
+      <div class="card" style="padding:4px 10px;" id="opList"></div>
+      <div id="opClamp"></div>
+      <div class="btn-pair"><button class="btn-wide" type="button" id="opNo">やめる</button><button class="btn-wide pri" type="button" id="opGo">取り込む</button></div>`;
+    const draw = () => {
+      computeRows(rows, on, clamp);
+      const eff = rows.filter(r => r.eff), cnt = k => eff.filter(r => r.kind === k).length;
+      const negN = rows.filter(r => r.neg).length, errN = rows.filter(r => r.st === "err").length, warnN = rows.filter(r => r.st === "warn").length;
+      const parts = ["use", "count", "add", "newItem", "alias"].filter(k => cnt(k)).map(k => KIND_LBL[k] + " " + cnt(k));
+      wrap.querySelector("#opSum").innerHTML = `取り込む ${eff.length}件${parts.length ? "（" + parts.join("・") + "）" : ""}${warnN ? ` ／ <span style="color:#a85a14;">注意 ${warnN}件</span>` : ""}${errN ? ` ／ <span style="color:var(--danger);">読み取れない ${errN}件（取り込みません）</span>` : ""}${negN ? ` ／ <span style="color:var(--danger);">マイナス ${negN}件</span>` : ""}`;
+      wrap.querySelector("#opList").innerHTML = rows.map(r => rowHtml(r, on)).join("");
+      const hasUse = rows.some(r => r.kind === "use" && r.st !== "err" && on[r.i]);
+      wrap.querySelector("#opClamp").innerHTML = (negN || clamp) && hasUse ? `<label class="chk"><input type="checkbox" id="opClampCk"${clamp ? " checked" : ""}> マイナスになる分は 0 で止める</label>` : "";
+      const go = wrap.querySelector("#opGo"); go.disabled = !eff.length; go.textContent = eff.length ? `取り込む（${eff.length}件）` : "取り込む";
+    };
+    wrap.addEventListener("change", e => {
+      if(e.target.classList.contains("op-ck")){ on[Number(e.target.dataset.i)] = e.target.checked; draw(); }
+      else if(e.target.id === "opClampCk"){ clamp = e.target.checked; draw(); }
+    });
+    wrap.querySelector("#opNo").addEventListener("click", closeSheet);
+    wrap.querySelector("#opGo").addEventListener("click", () => applyOps(file, rows, on, clamp));
+    draw();
+  }
+
+  function applyOps(file, rows, on, clamp){
+    computeRows(rows, on, clamp);
+    const eff = rows.filter(r => r.eff);
+    if(!eff.length) return;
+    const j = "i" + Date.now(), t = nowIso(), memo = file.memo || "";
+    const rec = { j, t, id: file.id, h: file.hash, memo, n: eff.length, items: [], created: [], n0: nextId };
+    const byId = {};
+    eff.forEach(r => {
+      const note = r.note ? (memo ? memo + "／" + r.note : r.note) : (memo || "入出庫ファイル");
+      if(r.kind === "newItem"){
+        const o = r.nw;
+        const m = { id: nextId++, cat: o.cat, name: o.name, size: o.size, mode: o.mode, price: o.price, packLen: o.packLen, qty: 0, cu: 1 };
+        if(o.shop) m.shop = o.shop;
+        if(o.al.length) m.al = o.al;
+        if(o.reorder != null) m.reorder = o.reorder;
+        materials.push(m); rec.created.push(m.id); openCats[o.cat] = true;
+        if(o.stock != null){ m.stock = o.stock; m.counted = t; logStock(m, "new", null, o.stock, note, j); }
+        return;
+      }
+      const m = r.m;
+      const it = byId[m.id] || (byId[m.id] = { id: m.id }); if(!rec.items.includes(it)) rec.items.push(it);
+      if(r.to !== undefined){
+        const from = m.stock == null ? null : m.stock;
+        if(it.sf === undefined){ it.sf = from; if(r.kind === "count") it.cf = m.counted || null; }
+        if(r.kind === "count" && it.cf === undefined) it.cf = m.counted || null;
+        m.stock = r.to; it.st = r.to;
+        if(r.kind === "count") m.counted = t;
+        logStock(m, r.kind, from, r.to, note, j);
+      }
+      if(r.alAdd && r.alAdd.length){
+        const have = (m.al || []).map(skey);
+        const added = r.alAdd.filter(a => !have.includes(skey(a)));
+        if(added.length){ m.al = normAliases([...(m.al || []), ...added]); it.al = (it.al || []).concat(added); }
+      }
+      if(r.shopSet){ if(!it.sh) it.sh = [m.shop || null, r.shopSet]; else it.sh[1] = r.shopSet; m.shop = r.shopSet; }
+    });
+    imports.push({ id: file.id, h: file.hash, t, memo, n: eff.length });
+    if(imports.length > 50) imports.splice(0, imports.length - 50);
+    lastImp = rec;
+    saveState(); closeSheet(); render(); renderStock();
+    showUndo("取り込みました（" + eff.length + "件）", undoImport, 8000);
+  }
+  function undoImport(){
+    const r = lastImp; if(!r) return;
+    (r.items || []).forEach(it => {
+      const m = materials.find(x => x.id === it.id); if(!m) return;
+      if(it.st !== undefined){
+        const cur = m.stock == null ? 0 : m.stock;
+        if(it.sf == null){ if(m.stock === it.st) delete m.stock; else m.stock = Math.max(0, r1(cur - it.st)); }
+        else m.stock = Math.max(0, r1(cur + (it.sf - it.st)));
+        if(it.cf !== undefined){ if(it.cf) m.counted = it.cf; else delete m.counted; }
+      }
+      if(it.al && it.al.length){ const ks = it.al.map(skey); m.al = (m.al || []).filter(a => !ks.includes(skey(a))); if(!m.al.length) delete m.al; }
+      if(it.sh && m.shop === it.sh[1]){ if(it.sh[0]) m.shop = it.sh[0]; else delete m.shop; }
+    });
+    const cs = r.created || [];
+    if(cs.length){
+      materials = materials.filter(m => !cs.includes(m.id));
+      nextId = Math.max(Number(r.n0) || 1, materials.reduce((mx, m) => Math.max(mx, m.id || 0), 0) + 1);
+    }
+    stockLog = stockLog.filter(e => e.j !== r.j);
+    imports = imports.filter(x => x.t !== r.t);
+    lastImp = null;
+    saveState(); render(); renderStock();
+    showUndo("取り込みを取り消しました", null, 3000);
+  }
+  function askUndoImp(){
+    if(!lastImp) return;
+    openDlg({ title: "直前の取り込みを取り消す？", html: `<div>${fmtDT(lastImp.t)} に取り込んだ入出庫（${lastImp.n}件${lastImp.memo ? "・" + esc(lastImp.memo) : ""}）を元に戻します。その後に変えた在庫の分はそのまま残ります。</div>`,
+      buttons: [{ t: "やめる" }, { t: "取り消す", cls: "b-dng", fn: undoImport }] });
+  }
+  function renderImpBar(){
+    const u = $("stUndo2"); if(!u) return;
+    if(lastImp){ u.style.display = "flex"; u.innerHTML = `<span>直前の取り込み: ${fmtDT(lastImp.t)}（${lastImp.n}件${lastImp.memo ? "・" + esc(lastImp.memo) : ""}）</span><button type="button" id="stUndo2Btn">取り消す</button>`;
+      $("stUndo2Btn").addEventListener("click", askUndoImp); }
+    else u.style.display = "none";
+  }
+  const _renderStock = renderStock;
+  renderStock = function(){ _renderStock(); renderImpBar(); };
+
+  // ---- ファイルを選ぶ → 検査 → 重複確認 → プレビュー ----
+  function opsErr(msg){ openDlg({ title: "取り込めませんでした", html: `<div>${msg}</div><div class="dlg-warn" style="margin-top:8px;">データは何も変わっていません。</div>`, buttons: [{ t: "OK", cls: "b-pri" }] }); }
+  function handleOpsText(text, size){
+    const p = parseOps(text, size);
+    if(p.err) return opsErr(p.err);
+    const f = p.file;
+    const dup = imports.find(x => (f.id && x.id === f.id) || x.h === f.hash);
+    if(dup){
+      openDlg({ title: "取り込み済みのファイルです", html: `<div>このファイル${dup.id ? "（ID: " + esc(dup.id) + "）" : ""}は ${fmtDT(dup.t)} に取り込み済みです${dup.memo ? "（" + esc(dup.memo) + "）" : ""}。もう一度取り込むと在庫が二重に増減します。</div>`,
+        buttons: [{ t: "やめる" }, { t: "それでも取り込む", cls: "b-dng", fn: () => openOpsPreview(f, true) }] });
+      return;
+    }
+    openOpsPreview(f, false);
+  }
+  function pickOps(){ $("opsFile").value = ""; $("opsFile").click(); }
+  $("opsBtn").addEventListener("click", pickOps);
+  $("stImport").addEventListener("click", pickOps);
+  $("opsFile").addEventListener("change", e => {
+    const f = e.target.files && e.target.files[0]; if(!f) return;
+    if(f.size > 1000000){ opsErr("ファイルが大きすぎます（1MBまで）。入出庫ファイルではなさそうです。"); return; }
+    const rd = new FileReader();
+    rd.onload = () => handleOpsText(String(rd.result), f.size);
+    rd.onerror = () => opsErr("ファイルを読み込めませんでした。");
+    rd.readAsText(f, "utf-8");
+  });
 
   loadState();   // v0.5: 保存済みの作業状態（部材・数量・税率）を復元してから描画
   render();
