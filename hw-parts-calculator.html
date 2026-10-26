@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  HW部材集計アプリ v0.9 (別名・購入先・入出庫ファイル取り込み 2026-10-26)
+  HW部材集計アプリ v1.0 (声で入力 2026-10-26)
   HYPER Water 設置で使った部材と数量を集計するツール
   - 「HW工事材料.xlsx」の131部材を初期搭載(カテゴリ分け)
   - 個数部材: 単価 × 数量(プルダウン) = 金額
@@ -17,6 +17,7 @@
   ※集計表の宛先・発行元(タイトル/宛先/会社名/住所)は localStorage に自動保存され、次回も残るよ(v0.4)
   ※v0.8: 在庫タブ(在庫数・発注点・棚卸し・足りないもの・発注リスト・履歴)／使った分を在庫から引く／削除は名前入り確認+元に戻す／単価の行内編集(●=手で変更)／重複をまとめる／価格の基準日表示。保存形式は v:2(旧v:1は自動移行)
   ※v0.9: 別名(検索/名前合わせ)・購入先メモ・「ファイルを取り込む(入出庫)」(hw-parts-ops v1 のJSON。プレビュー→OK→8秒取り消し・二重取り込み防止)。保存形式 v:2→v:3(自動移行)。
+  ※v1.0: 在庫タブに「声で入力」。話した/打った日本語を入出庫(hw-parts-ops v1)に変えて、いつものプレビュー→取り込む→8秒取り消し・二重取り込み防止に流す。言い直し(間違えた12個だった)・別名の学習に対応。解釈はこの中だけで完結(通信なし)。マイクボタンだけ Web Speech API(Android Chromeはネット必須)。保存形式は v0.9 と同じ v:3(変更なし)
 -->
 <html lang="ja">
 <head>
@@ -448,6 +449,38 @@
   .op-row.err{opacity:.8;background:#fdf1f0;border-radius:9px;}
   .op-row.off .op-nm,.op-row.off .op-v{opacity:.45;}
   .op-row.warn{background:#fffaf2;}
+
+  /* ===== v1.0 追加: 声で入力 ===== */
+  .vc-card{background:var(--surface);border:1.5px solid var(--line);border-radius:12px;padding:11px 12px 12px;margin:2px 0 8px;}
+  .vc-h{font-size:14px;font-weight:800;margin-bottom:6px;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;}
+  .vc-sub{font-size:11px;font-weight:600;color:var(--ink-soft);}
+  .vc-l{display:block;font-size:11.5px;font-weight:700;color:var(--ink-soft);margin-bottom:4px;}
+  #vcText{width:100%;min-height:62px;border:1.5px solid var(--line);border-radius:9px;padding:10px 11px;font-size:16px;font-family:inherit;color:var(--ink);background:#fff;resize:vertical;line-height:1.5;display:block;}
+  #vcText:focus{outline:none;border-color:var(--accent);}
+  .vc-hint{font-size:11px;color:var(--ink-soft);margin:5px 1px 8px;line-height:1.55;}
+  .vc-btns{display:flex;gap:8px;}
+  .vc-btns .st-btn{padding:12px 4px;font-size:14px;}
+  .vc-btns .st-btn:disabled{opacity:.45;cursor:not-allowed;}
+  #vcMic.rec{background:var(--danger);border-color:var(--danger);color:#fff;}
+  .vc-st{font-size:12px;line-height:1.55;margin-top:7px;color:var(--ink-soft);word-break:break-word;}
+  .vc-st:empty{display:none;}
+  .vc-st.w{color:#a85a14;font-weight:700;} .vc-st.ok{color:var(--accent-deep);font-weight:700;}
+  .vrow{border-top:1px solid var(--line);padding-bottom:9px;}
+  .vrow:first-child{border-top:none;}
+  .vrow .op-row{border-top:none;padding-bottom:4px;}
+  .vctl{margin:0 0 0 31px;padding:8px 9px;background:#f4f8f9;border-radius:9px;}
+  .v-said{font-size:11px;color:var(--ink-soft);font-weight:600;margin-bottom:6px;word-break:break-word;}
+  .v-seg{display:flex;gap:5px;margin-bottom:7px;}
+  .vk{flex:1;min-width:0;border:1.5px solid var(--line);background:#fff;border-radius:8px;padding:8px 2px;font-size:12.5px;font-weight:800;color:var(--ink-soft);font-family:inherit;cursor:pointer;}
+  .vk.on{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .v-line{margin-top:6px;}
+  .v-q{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--ink-soft);}
+  .vq{width:88px;border:1.5px solid var(--line);border-radius:8px;padding:8px 9px;font-size:16px;font-weight:700;color:var(--ink);font-family:inherit;text-align:right;background:#fff;}
+  .vq:focus,.vm:focus{outline:none;border-color:var(--accent);}
+  .v-u{font-size:13px;}
+  .vm{width:100%;border:1.5px solid var(--line);border-radius:8px;padding:9px 8px;font-size:14px;font-family:inherit;color:var(--ink);background:#fff;}
+  .vl{display:flex;align-items:flex-start;gap:7px;font-size:12px;font-weight:700;color:var(--accent-deep);margin-top:8px;line-height:1.5;}
+  .vl input{width:20px;height:20px;flex:none;accent-color:var(--accent);margin-top:1px;}
 </style>
 </head>
 <body>
@@ -458,7 +491,7 @@
         <path d="M12 2.5C12 2.5 5 10 5 14.5C5 18.5 8.13 21.5 12 21.5C15.87 21.5 19 18.5 19 14.5C19 10 12 2.5 12 2.5Z" fill="#0a9396"/>
         <path d="M9 14.5C9 16.16 10.34 17.5 12 17.5" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>
       </svg>
-      HW部材集計 <span style="font-size:10.5px;font-weight:700;color:var(--ink-soft);opacity:.7;margin-left:2px;">v0.9</span>
+      HW部材集計 <span style="font-size:10.5px;font-weight:700;color:var(--ink-soft);opacity:.7;margin-left:2px;">v1.0</span>
     </div>
     <div class="subtitle">HYPER Water 設置で使った部材を集計</div>
     <div class="price-date" id="priceDate"></div>
@@ -584,6 +617,14 @@
     <button class="st-btn" id="stHist" type="button">📜 履歴</button>
   </div>
   <div class="st-actions second"><button class="st-btn" id="stImport" type="button">📥 ファイルを取り込む（入出庫）</button></div>
+  <section class="vc-card" id="vcCard" aria-labelledby="vcH">
+    <div class="vc-h" id="vcH">声で入力 <span class="vc-sub">話した内容を入出庫にします</span></div>
+    <label class="vc-l" for="vcText">話した内容</label>
+    <textarea id="vcText" rows="3" maxlength="2000" placeholder="例: エルボ20Aを3個使った、チーズ25Aが2個入った" autocomplete="off" autocapitalize="off" spellcheck="false"></textarea>
+    <div class="vc-hint">キーボードのマイク🎤で話すか、文字で入れてね。押すまで何も変わりません（確認画面が出ます）。</div>
+    <div class="vc-btns"><button class="st-btn" id="vcMic" type="button">🎤 声で入力</button><button class="st-btn primary" id="vcGo" type="button">解釈する</button></div>
+    <div class="vc-st" id="vcStatus" role="status" aria-live="polite"></div>
+  </section>
   <div class="st-undo" id="stUndo" style="display:none;"></div>
   <div class="st-undo" id="stUndo2" style="display:none;"></div>
   <div class="toolbar">
@@ -2156,17 +2197,19 @@
   }
 
   function openOpsPreview(file, force){
-    const rows = buildPlan(file), on = {};
+    let rows = buildPlan(file); const on = {};
     rows.forEach(r => { on[r.i] = r.st !== "err" && r.defOn; });
+    if(file.voice) voiceInit(file, rows, on);
     let clamp = false;
     const wrap = document.createElement("div");
-    openSheet("入出庫ファイルの取り込み", wrap);
+    openSheet(file.voice ? "声で入力の確認" : "入出庫ファイルの取り込み", wrap);
     wrap.innerHTML = `<div class="card ops-head">
+        ${file.voice ? voiceHead(file) : ""}
         ${file.memo ? `<div>案件: <b>${esc(file.memo)}</b></div>` : `<div style="opacity:.7;">案件メモなし</div>`}
         ${file.date ? `<div>日付: ${esc(file.date.slice(0, 10))}</div>` : ""}
-        ${file.id ? `<div>ファイルID: ${esc(file.id)}</div>` : ""}
+        ${file.id && !file.voice ? `<div>ファイルID: ${esc(file.id)}</div>` : ""}
         ${force ? `<div class="op-m e">✖ このファイルは取り込み済みです。もう一度入れると二重に反映されます。</div>` : ""}
-        <div class="sh-hint" style="margin-top:6px;">内容を確認して、よければ下の「取り込む」を押してね。取り込んだ後も8秒間は取り消せます。</div></div>
+        <div class="sh-hint" style="margin-top:6px;">内容を確認して、よければ下の「取り込む」を押してね。取り込んだ後も8秒間は取り消せます。${file.voice ? "<br>聞き違いがないか、部材と数量を見てね。「使った／入った／数えた」は行ごとに変えられます。" : ""}</div></div>
       <div class="ops-sum" id="opSum"></div>
       <div class="card" style="padding:4px 10px;" id="opList"></div>
       <div id="opClamp"></div>
@@ -2177,7 +2220,7 @@
       const negN = rows.filter(r => r.neg).length, errN = rows.filter(r => r.st === "err").length, warnN = rows.filter(r => r.st === "warn").length;
       const parts = ["use", "count", "add", "newItem", "alias"].filter(k => cnt(k)).map(k => KIND_LBL[k] + " " + cnt(k));
       wrap.querySelector("#opSum").innerHTML = `取り込む ${eff.length}件${parts.length ? "（" + parts.join("・") + "）" : ""}${warnN ? ` ／ <span style="color:#a85a14;">注意 ${warnN}件</span>` : ""}${errN ? ` ／ <span style="color:var(--danger);">読み取れない ${errN}件（取り込みません）</span>` : ""}${negN ? ` ／ <span style="color:var(--danger);">マイナス ${negN}件</span>` : ""}`;
-      wrap.querySelector("#opList").innerHTML = rows.map(r => rowHtml(r, on)).join("");
+      wrap.querySelector("#opList").innerHTML = rows.map(r => file.voice ? voiceRowHtml(file, r, on) : rowHtml(r, on)).join("");
       const hasUse = rows.some(r => r.kind === "use" && r.st !== "err" && on[r.i]);
       wrap.querySelector("#opClamp").innerHTML = (negN || clamp) && hasUse ? `<label class="chk"><input type="checkbox" id="opClampCk"${clamp ? " checked" : ""}> マイナスになる分は 0 で止める</label>` : "";
       const go = wrap.querySelector("#opGo"); go.disabled = !eff.length; go.textContent = eff.length ? `取り込む（${eff.length}件）` : "取り込む";
@@ -2186,8 +2229,9 @@
       if(e.target.classList.contains("op-ck")){ on[Number(e.target.dataset.i)] = e.target.checked; draw(); }
       else if(e.target.id === "opClampCk"){ clamp = e.target.checked; draw(); }
     });
+    if(file.voice) voiceBind(wrap, file, () => rows, v => { rows = v; }, on, draw);
     wrap.querySelector("#opNo").addEventListener("click", closeSheet);
-    wrap.querySelector("#opGo").addEventListener("click", () => applyOps(file, rows, on, clamp));
+    wrap.querySelector("#opGo").addEventListener("click", () => { if(file.voice) rows = voiceFinalize(wrap, file, rows, on); applyOps(file, rows, on, clamp); });
     draw();
   }
 
@@ -2276,7 +2320,9 @@
   function handleOpsText(text, size){
     const p = parseOps(text, size);
     if(p.err) return opsErr(p.err);
-    const f = p.file;
+    handleOpsFile(p.file);
+  }
+  function handleOpsFile(f){
     const dup = imports.find(x => (f.id && x.id === f.id) || x.h === f.hash);
     if(dup){
       openDlg({ title: "取り込み済みのファイルです", html: `<div>このファイル${dup.id ? "（ID: " + esc(dup.id) + "）" : ""}は ${fmtDT(dup.t)} に取り込み済みです${dup.memo ? "（" + esc(dup.memo) + "）" : ""}。もう一度取り込むと在庫が二重に増減します。</div>`,
@@ -2296,6 +2342,553 @@
     rd.onerror = () => opsErr("ファイルを読み込めませんでした。");
     rd.readAsText(f, "utf-8");
   });
+
+  // ===== 声で入力 パーサー（純粋関数・DOM/通信なし。テストでは Node で同じコードを読み込んで検証） =====
+  const VoiceParser = (function(){
+    "use strict";
+    const nfkc = s => String(s == null ? "" : s).normalize("NFKC");
+    const hira = s => s.replace(/[\u30a1-\u30f6]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x60));
+    // アプリ本体の skey() と同じ正規化（全角半角・大小文字・カタカナ→ひらがな・異形/異型・空白や記号）
+    const skey = s => hira(nfkc(s).toLowerCase()).replace(/異形/g, "異型").replace(/[×✕✖*]/g, "x").replace(/[\s\u3000・\-_\/]/g, "");
+    const KDIG = { "〇": "0", "零": "0", "一": "1", "二": "2", "三": "3", "四": "4", "五": "5", "六": "6", "七": "7", "八": "8", "九": "9" };
+    // 漢字の読み（部材名側・聞き取り側の両方に当てる。ひらがなで話した/認識された場合の照合用）
+    const READ = [["水道用", "すいどうよう"], ["管継ぎ手", "くだつぎて"], ["管継手", "くだつぎて"], ["継ぎ手", "つぎて"], ["継手", "つぎて"], ["樹脂", "じゅし"], ["水栓", "すいせん"], ["鋼管", "こうかん"],
+      ["黄銅", "おうどう"], ["逆止弁", "ぎゃくしべん"], ["蝶番式", "ちょうつがいしき"], ["蝶番", "ちょうつがい"], ["蝶", "ちょう"], ["調整式", "ちょうせいしき"], ["支持金具", "しじかなぐ"], ["金具", "かなぐ"],
+      ["固定足", "こていあし"], ["延長", "えんちょう"], ["防雨型", "ぼううがた"], ["防雨形", "ぼううがた"], ["絶縁", "ぜつえん"], ["圧着", "あっちゃく"], ["端子", "たんし"], ["裸", "はだか"], ["保温材", "ほおんざい"],
+      ["耐熱", "たいねつ"], ["電線", "でんせん"], ["収縮", "しゅうしゅく"], ["変換", "へんかん"], ["土嚢", "どのう"], ["厚手", "あつで"], ["座付き", "ざつき"], ["付き", "つき"], ["異型", "いけい"],
+      ["黒", "くろ"], ["白", "しろ"], ["赤", "あか"], ["緑", "みどり"], ["黄", "き"], ["青", "あお"], ["丸", "まる"], ["立", "たて"], ["大", "だい"], ["小", "しょう"], ["用", "よう"], ["弁", "べん"], ["管", "かん"],
+      ["巻", "まき"], ["袋", "ふくろ"], ["箱", "はこ"], ["枚", "まい"], ["絹", "きぬ"], ["板", "いた"]].sort((a, b) => b[0].length - a[0].length);
+    // 照合用キー: skey に加えて、漢数字→数字、ミリ→mm、メートル→m、括弧類を除去
+    function vkey(s){
+      let k = skey(s).replace(/[〇零一二三四五六七八九]/g, c => KDIG[c]);
+      k = k.replace(/みりめーとる/g, "mm").replace(/みり/g, "mm").replace(/めーとる|めーたー/g, "m").replace(/[()\[\]{}「」『』【】<>"'`,:;!?]/g, "");
+      return k;
+    }
+    // 聞き取り側だけの言い換え（ハイ→HI、20エー→20A）
+    function qkey(s){
+      return vkey(s).replace(/^はい(?=[ぁ-んー])/, "hi").replace(/えいちあい/g, "hi").replace(/(\d[a-z]?)かける(?=\d)/g, "$1x").replace(/(\d)(?:えー|えい)(?![ぁ-んー])/g, "$1a");
+    }
+    // ゆるい形: 漢字の読みを当て、長音・促音を無視
+    function relax(k){
+      READ.forEach(p => { if(k.includes(p[0])) k = k.split(p[0]).join(p[1]); });
+      return k.replace(/[ーっ]/g, "");
+    }
+    const numsOf = s => (s.match(/\d+(?:\.\d+)?/g) || []);
+    function approxSub(p, t){
+      const m = p.length, n = t.length;
+      let prev = new Array(n + 1).fill(0);
+      for(let i = 1; i <= m; i++){
+        const cur = [i];
+        for(let j = 1; j <= n; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (p[i - 1] === t[j - 1] ? 0 : 1));
+        prev = cur;
+      }
+      return Math.min.apply(null, prev);
+    }
+
+    // ---------------- 数字: 漢数字・かな数字 → アラビア数字 ----------------
+    function kanjiVal(s){
+      if(!/[十百千]/.test(s)) return Number(s.split("").map(c => KDIG[c] || "0").join(""));
+      if(!/^(?:[一二三四五六七八九]?千)?(?:[一二三四五六七八九]?百)?(?:[一二三四五六七八九]?十)?[一二三四五六七八九]?$/.test(s)) return NaN;
+      let t = 0, n = null;
+      for(const ch of s){
+        if(KDIG[ch] !== undefined) n = Number(KDIG[ch]);
+        else { const mul = ch === "十" ? 10 : ch === "百" ? 100 : 1000; t += (n == null ? 1 : n) * mul; n = null; }
+      }
+      return t + (n || 0);
+    }
+    const KANA_NUM = [["きゅう", "九"], ["きゅー", "九"], ["じゅう", "十"], ["じゅっ", "十"], ["じっ", "十"], ["ひゃく", "百"], ["びゃく", "百"], ["ぴゃく", "百"], ["せん", "千"], ["ぜん", "千"],
+      ["いち", "一"], ["いっ", "一"], ["さん", "三"], ["よん", "四"], ["ろく", "六"], ["ろっ", "六"], ["なな", "七"], ["しち", "七"], ["はち", "八"], ["はっ", "八"], ["ぜろ", "〇"], ["れい", "〇"],
+      ["に", "二"], ["ご", "五"], ["よ", "四"], ["く", "九"]];
+    function kanaVal(s){
+      let out = "", i = 0;
+      while(i < s.length){
+        const hit = KANA_NUM.find(p => s.startsWith(p[0], i));
+        if(!hit) return NaN;
+        out += hit[1]; i += hit[0].length;
+      }
+      return out ? kanjiVal(out) : NaN;
+    }
+    const UNIT_AFTER = "(?=\\s*(?:個|ヶ|ケ|コ|こ|本|ほん|ぼん|ぽん|つ|m(?![a-z])|mm|メートル|メーター|袋|ふくろ|箱|はこ|セット|枚|まい|巻|組|点|a(?![a-z])|ミリ|センチ|cm|分|×|x|φ|だった|です|でした|ずつ|づつ|を|が|は|も|で|と|$|[、,。!?.\\s]))";
+    function convNums(s){
+      s = s.replace(/(ひとつ|ふたつ|みっつ|よっつ|いつつ|むっつ|ななつ|やっつ|ここのつ)/g, (m, w) => ({ "ひとつ": 1, "ふたつ": 2, "みっつ": 3, "よっつ": 4, "いつつ": 5, "むっつ": 6, "ななつ": 7, "やっつ": 8, "ここのつ": 9 })[w] + "つ");
+      s = s.replace(new RegExp("[〇零一二三四五六七八九十百千]+" + UNIT_AFTER, "gi"), m => { const v = kanjiVal(m); return isFinite(v) ? String(v) : m; });
+      s = s.replace(new RegExp("([いちにさんよしごろくなはきゅうじゅひゃびぴせぜっーれ]+)(?=(?:こ|個|本|ほん|ぽん|ぼん|袋|ふくろ|箱|はこ|枚|巻|組|点|セット|メートル|めーとる|めーたー|m|まい|つ))", "g"), run => {
+        for(let k = 0; k < run.length; k++){ const v = kanaVal(run.slice(k)); if(isFinite(v)) return run.slice(0, k) + v; }
+        return run;
+      });
+      return s.replace(/(\d+)点(\d+)/g, "$1.$2");
+    }
+
+    // ---------------- 言い回し ----------------
+    const USE_SRC = "使いました|使いまして|使います|使った|使って|使う|つかいました|つかった|つかって|使用した|使用|消費した|消費|出庫した|出庫|出しました|出した|出して|出ました|出た|減りました|減った|へった|減る|引いた|引いて|引く|取り付けた|取り付けました|付けた|つけた";
+    const ADD_SRC = "入荷しました|入荷した|入荷|入りました|入った|はいった|仕入れました|仕入れた|仕入れ|仕入|追加しました|追加した|追加|買いました|買った|買って|かった|購入しました|購入した|購入|入庫しました|入庫した|入庫|補充した|補充|足した|足して|もらった|もらいました|届いた|とどいた";
+    const CNT_SRC = "残りは|残りが|残りを|残り|のこり|残ってる|残っている|残ってた|残った|残って|在庫は|在庫が|在庫を|在庫|数えたら|数えた|かぞえたら|棚卸し|棚卸|ありました|あります|あった|ある";
+    const ARU_RE = /^(?:ありました|あります|あった|ある)$/;
+    const VERB_RE = new RegExp("(" + USE_SRC + ")|(" + ADD_SRC + ")|(" + CNT_SRC + ")", "g");
+    const UNIT_SRC = "個|ヶ|ケ|コ|こ|本|ほん|ぽん|ぼん|つ|m(?![a-z])|メートル|メーター|めーとる|袋|ふくろ|箱|はこ|セット|枚|まい|巻|組|点";
+    const LEN_UNIT = /^(?:m|メートル|メーター|めーとる)$/i;
+    const TAIL_RE = new RegExp("^(?:\\s|ずつ|づつ|くらい|ぐらい|ほど|だった|でした|です|ぶん|分|全部で|ちょうど|" + USE_SRC + "|" + ADD_SRC + "|" + CNT_SRC + "|[をはがもにでとねよなだ])*");
+    const FILL_HEAD = /^(?:\s|[、,]|えーっと|えーと|えっと|ええと|えぇと|えーっ|あのー|あのう|あの|えー|ええ|あー|あっ|あ|うーん|うーむ|うん|んー|んと|まあ|まー|じゃあ|じゃ|では|はい|そうですね|それで|んで|ほんで|なんか|ちょっと|あと|それから|それと|そして|お願いします|お願い|以上です|以上|終わりです|終わり|ありがとうございます|ありがとう|お疲れ様です|お疲れさまです)+/;
+    const FILL_MID = /えーっと|えーと|えっと|ええと|あのー|あのう|うーん/g;
+    const FILL_TAIL = /(?:[\s、,。ねよなっす]|です|でした|だった|だ|お願いします|お願い|以上|ありがとう)+$/;
+    const COR_RE = /(?:すみません|すいません|ごめんなさい|ごめん)?(?:あ+[、,\s]*)?(?:えっと違う|間違えました|間違えてました|間違えてた|間違えちゃった|間違えた|間違えて|間違い|まちがえた|まちがえ|まちがい|違いました|違います|違った|違う|ちがいます|ちがった|ちがう|じゃなくて|じゃなく|ではなくて|ではなく|でなくて|じゃない|やっぱり|やっぱ|訂正|ていせい|いや|失礼しました|失礼|しつれい|ごめんなさい|ごめん)(?:[、,\s]|です|でした|だった)*/g;
+
+    function stripFill(t){
+      let prev;
+      do { prev = t; t = t.replace(FILL_HEAD, ""); } while(t !== prev);
+      return t.replace(FILL_MID, " ").trim();
+    }
+    function cleanName(t){
+      t = t.replace(VERB_RE, " ").replace(FILL_MID, " ");
+      t = stripFill(t);
+      let prev;
+      do {
+        prev = t;
+        t = t.replace(/^(?:だった|でした|です|ずつ|づつ|くらい|ぐらい)+/, "").replace(/^(?:今日|きょう|昨日|きのう|さっき|現場|全部|ぜんぶ|合計)(?:は|の|で|を)?/, "").replace(/^[\sをはがのもにでと、,]+/, "").replace(/[\sをはがのもにでと、,ねよな]+$/, "").replace(/(?:だった|でした|です|だ|ずつ|づつ|くらい|ぐらい|ほど|ぶん|分|全部で|合計|ちょうど|あと|それ|あ)$/, "");
+      } while(t !== prev);
+      return t.trim();
+    }
+
+    // ---------------- 部材の照合 ----------------
+    const idxCache = new WeakMap();
+    function indexOf(m){
+      const sig = (m.name || "") + "\u0001" + (m.size || "") + "\u0001" + (m.al || []).join("\u0002");
+      let c = idxCache.get(m);
+      if(!c || c.sig !== sig){
+        const nm = vkey(m.name || ""), sz = vkey(m.size || ""), full = vkey((m.name || "") + (m.size || ""));
+        c = { sig, nm, sz, full, rnm: relax(nm), rsz: relax(sz), rfull: relax(full), nums: numsOf(full),
+          al: (m.al || []).map(a => { const k = vkey(a); return { k, r: relax(k), nums: numsOf(k) }; }).filter(a => a.k) };
+        idxCache.set(m, c);
+      }
+      return c;
+    }
+    const SIZE_TAIL = /(\d+(?:\.\d+)?(?:a|mm|m)?(?:x\d+(?:\.\d+)?(?:a|mm|m)?)*)$/;
+    function sizeLvl(ks, c){
+      if(!ks) return 0;
+      const sz = c.sz;
+      if(sz === ks) return 2;
+      if(sz.startsWith(ks) && !/\d/.test(sz.charAt(ks.length))) return 1;
+      const i = c.full.indexOf(ks);
+      if(i >= 0 && !/\d/.test(c.full.charAt(i - 1)) && !/\d/.test(c.full.charAt(i + ks.length))) return 1;   // 規格が名前の中にあるとき（例: 300ミリ）
+      return 0;
+    }
+    function prepQuery(text){
+      const K = qkey(text), R = relax(K);
+      const sm = K.match(SIZE_TAIL);
+      const Ks = sm ? sm[1] : "", Kn = sm ? K.slice(0, K.length - Ks.length) : K;
+      const toks = String(text).split(/[\s\u3000、,をがはのにでと]+/).map(qkey).filter(Boolean);
+      return { K, R, Ks, Kn, rKn: relax(Kn), nums: numsOf(K), toks };
+    }
+    function scoreMat(q, c){
+      let s = 0, how = "";
+      const up = (v, h) => { if(v > s){ s = v; how = h; } };
+      const L = q.K.length;
+      const numsIn = nums => q.nums.every(n => nums.includes(n));
+      for(const a of c.al){
+        if(a.k === q.K || a.r === q.R) up(1.0, "別名");
+        else if(a.k.length >= 2 && q.K.startsWith(a.k) && q.K.length > a.k.length){
+          const rest = q.K.slice(a.k.length);
+          if(sizeLvl(rest, c) > 0) up(0.92, "別名+サイズ");
+        }
+      }
+      if(L < 2) return { s, how };
+      if(q.K === c.full || q.K === c.nm) up(0.97, "名前一致");
+      else if(q.R === c.rfull || q.R === c.rnm) up(0.94, "名前一致(ゆるい)");
+      if(numsIn(c.nums)){
+        const cov = L / Math.max(c.full.length, 1);
+        if(c.full.includes(q.K)) up(Math.min(0.5 + 0.45 * cov, 0.96), "名前に含まれる");
+        else if(c.rfull.includes(q.R)) up(Math.min(0.5 + 0.45 * (q.R.length / Math.max(c.rfull.length, 1)), 0.96) - 0.03, "名前に含まれる(ゆるい)");
+      }
+      for(const a of c.al){
+        if(numsIn(a.nums.concat(c.nums)) && a.k.includes(q.K) && a.k !== q.K) up(Math.min(0.5 + 0.45 * (L / a.k.length), 0.66), "別名に含まれる")   /* 別名の一部だけ言われた時は自動決定しない（上限 0.66） */;
+      }
+      if(q.Ks && q.Kn.length >= 2){
+        const lvl = sizeLvl(q.Ks, c);
+        if(lvl){
+          const hays = [c.nm, ...c.al.map(a => a.k)];
+          for(const h of hays) if(h.includes(q.Kn)) up(0.45 + 0.3 * (q.Kn.length / Math.max(h.length, 1)) + (lvl === 2 ? 0.1 : 0.05), "名前+サイズ");
+          if(c.rnm.includes(q.rKn) && q.rKn.length >= 2) up(0.42 + 0.3 * (q.rKn.length / Math.max(c.rnm.length, 1)) + (lvl === 2 ? 0.1 : 0.05), "名前+サイズ(ゆるい)");
+        }
+      }
+      if(q.toks.length >= 2 && numsIn(c.nums) && q.toks.every(t => t.length >= 1 && (c.full.includes(t) || c.al.some(a => a.k.includes(t))))){
+        up(0.4 + 0.3 * (q.toks.reduce((n, t) => n + t.length, 0) / Math.max(c.full.length, 1)), "単語ごと");
+      }
+      if(s < 0.45 && q.Kn.length >= 4 && (!q.Ks || sizeLvl(q.Ks, c) > 0)){
+        const maxD = Math.floor(q.rKn.length / 4);
+        if(maxD >= 1){
+          let d = approxSub(q.rKn, c.rnm);
+          c.al.forEach(a => { d = Math.min(d, approxSub(q.rKn, a.r)); });
+          if(d >= 1 && d <= maxD) up(0.35 + 0.25 * (1 - d / q.rKn.length), "近い読み");
+        }
+      }
+      if(s < 0.3 && q.Ks && q.Kn.length >= 3 && (c.nm.includes(q.Kn) || c.rnm.includes(q.rKn))) up(0.3 + 0.2 * (q.Kn.length / Math.max(c.nm.length, 1)), "サイズ違い");
+      return { s, how };
+    }
+    function rankMats(text, mats){
+      const q = prepQuery(text), out = [];
+      mats.forEach(m => { const r = scoreMat(q, indexOf(m)); if(r.s >= 0.3) out.push({ m, id: m.id, score: Math.round(r.s * 1000) / 1000, how: r.how }); });
+      out.sort((a, b) => b.score - a.score || a.id - b.id);
+      return out;
+    }
+    // 名前の言い方から部材を決める。結果: status ok(そのまま採用) / cand(候補から選ぶ) / none(未検出)
+    function matchName(text, mats){
+      text = String(text || "").trim();
+      let ranked = rankMats(text, mats);
+      // 「田中邸でエルボ20A」のように前置きがあるとき: 先頭の単語を落として再挑戦
+      const parts = text.split(/[\s\u3000をがはのにでと、,]+/).filter(Boolean);
+      if((!ranked.length || ranked[0].score < 0.63) && parts.length >= 2){
+        for(let i = 1; i < parts.length; i++){
+          const r2 = rankMats(parts.slice(i).join(""), mats);
+          if(r2.length && (!ranked.length || r2[0].score * 0.97 > ranked[0].score)) ranked = r2.map(x => Object.assign({}, x, { score: Math.round(x.score * 0.97 * 1000) / 1000 }));
+        }
+      }
+      const s1 = ranked.length ? ranked[0].score : 0, s2 = ranked.length > 1 ? ranked[1].score : 0, gap = s1 - s2;
+      let status = "none", pick = null;
+      if(s1 >= 0.9 && gap >= 0.03) { status = "ok"; pick = ranked[0]; }
+      else if(s1 >= 0.63 && gap >= 0.12) { status = "ok"; pick = ranked[0]; }
+      else if(s1 >= 0.75 && gap >= 0.08) { status = "ok"; pick = ranked[0]; }
+      else if(s1 >= 0.45){ status = "cand"; if(gap >= 0.08) pick = ranked[0]; }
+      const cands = ranked.slice(0, 6).map(x => ({ id: x.id, score: x.score, how: x.how }));
+      return { status, id: pick ? pick.id : null, score: s1, gap, cands: status === "none" && s1 < 0.3 ? [] : cands };
+    }
+
+    // ---------------- 文の分解 ----------------
+    const QTY_RE_SRC = "(\\d+(?:\\.\\d+)?)\\s*(" + UNIT_SRC + ")(?!入り)";
+    function findBareQty(t){
+      const re = /(\d+(?:\.\d+)?)/g; let m, hit = null;
+      while((m = re.exec(t))){
+        const before = t.charAt(m.index - 1), after = t.slice(m.index + m[0].length);
+        if(/^\s*(?:a|x|mm|cm|m\b|φ|ぶ|分|ミリ|センチ)/i.test(after)) continue;
+        if(m.index > 0 && !/[\s、,をがはも]/.test(before)) continue;
+        hit = { val: Number(m[1]), idx: m.index, len: m[0].length };
+      }
+      return hit;
+    }
+    function segment(text){
+      const out = []; let pos = 0, m;
+      const re = new RegExp(QTY_RE_SRC, "gi");
+      while((m = re.exec(text))){
+        const end = m.index + m[0].length;
+        const tail = TAIL_RE.exec(text.slice(end));
+        const e2 = end + (tail ? tail[0].length : 0);
+        out.push({ text: text.slice(pos, e2), q: { val: Number(m[1]), unit: m[2], idx: m.index - pos, len: m[0].length } });
+        pos = e2; re.lastIndex = e2;
+      }
+      if(pos < text.length && text.slice(pos).trim()) out.push({ text: text.slice(pos), q: null });
+      return out;
+    }
+    function analyze(sg){
+      let t = sg.text, qty = null, unit = "", unitKind = "", qpos = -1;
+      if(sg.q){ qty = sg.q.val; unit = sg.q.unit; unitKind = LEN_UNIT.test(unit) ? "len" : "cnt"; qpos = sg.q.idx; t = t.slice(0, sg.q.idx) + " " + t.slice(sg.q.idx + sg.q.len); }
+      else {
+        const b = findBareQty(t);
+        if(b){ qty = b.val; qpos = b.idx; t = t.slice(0, b.idx) + " " + t.slice(b.idx + b.len); }
+      }
+      // 動詞（使った/入った/残り…）
+      const verbs = []; let vm; VERB_RE.lastIndex = 0;
+      while((vm = VERB_RE.exec(t))){
+        const kind = vm[1] ? "use" : vm[2] ? "add" : "count";
+        if(kind === "count" && ARU_RE.test(vm[0]) && !(qpos >= 0 && vm.index >= qpos) && qpos >= 0) continue;
+        verbs.push({ kind, pos: vm.index, w: vm[0] });
+      }
+      let kind = null;
+      if(verbs.length){
+        const after = verbs.filter(v => qpos < 0 || v.pos >= qpos);
+        kind = (after.length ? after[0] : verbs[0]).kind;
+      }
+      return { name: cleanName(t), qty, unit, unitKind, kind };
+    }
+    function numSized(name){ return /^[\d.]+\s*a?(?:\s*[x×]\s*[\d.]+\s*a?)*$/i.test(nfkc(name).replace(/\s+/g, "")); }
+    function stemOf(name){ return name.replace(/[\d.]+\s*[aA]?(?:\s*[×xX]\s*[\d.]+\s*[aA]?)*\s*$/, "").trim(); }
+
+    function parseOne(text, mats){
+      const items = [], events = [];
+      const ctx = { last: null, pending: false, sent: 0 };
+      let s = convNums(nfkc(text).replace(/[\r\n]+/g, "。").replace(/\s+/g, " "));
+      s = s.replace(/(個|ヶ|ケ|コ|本|ほん|メートル|袋|箱|セット|枚|巻|組|点|つ|m|\d)と(?=[^、。!?])/g, "$1、");
+      s = s.replace(/(^|[、,。!?\s]|個|ヶ|ケ|コ|本|メートル|袋|箱|セット|枚|巻|組|点|つ|\d|m)(それから|それと|そして|あとは|あと|つぎは|次は|次に|さらに|ほかに|続いて|んで)/g, "$1、");
+      const sents = s.split(/[。]|(?<!\d)\.(?!\d)/);
+      const addItem = (a, sent) => {
+        const it = { name: a.name, qty: a.qty, unit: a.unit, unitKind: a.unitKind, kind: a.kind, explicit: !!a.kind, sent, corrected: false, corr: null, corrItem: null };
+        items.push(it); events.push(it); ctx.last = it; return it;
+      };
+      const normalSeg = (sg, sent) => {
+        const a = analyze(sg);
+        if(!a.name && a.qty == null){ if(a.kind) events.push({ modeOnly: true, kind: a.kind, sent }); return; }
+        if(!a.name){
+          const l = ctx.last;
+          if(l && l.qty == null){ l.qty = a.qty; l.unit = a.unit; l.unitKind = a.unitKind; if(a.kind && !l.kind){ l.kind = a.kind; l.explicit = true; } return; }
+          const it = addItem(a, sent); it.noName = true; return;
+        }
+        addItem(a, sent);
+      };
+      const corrChunk = (chunk, sent) => {
+        chunk = stripFill(chunk);
+        if(!chunk){ ctx.pending = true; return; }
+        ctx.pending = false;
+        const sgs = segment(chunk), l = ctx.last;
+        if(!sgs.length) return;
+        const a = analyze(sgs[0]);
+        if(l){
+          if(a.name){
+            let nn = a.name;
+            if(numSized(nn)){ const st = stemOf(l.name); nn = st ? st + nn : nn; }
+            if(skey(nn) !== skey(l.name)){ l.corrItem = { from: l.name, to: nn }; l.name = nn; }
+          }
+          if(a.qty != null){ if(l.qty != null && l.qty !== a.qty) l.corr = { from: l.qty, to: a.qty }; l.qty = a.qty; l.unit = a.unit; l.unitKind = a.unitKind; }
+          if(a.kind){ l.kind = a.kind; l.explicit = true; }
+          if(a.name || a.qty != null || a.kind) l.corrected = true;
+          sgs.slice(1).forEach(sg => normalSeg(sg, sent));
+        } else sgs.forEach(sg => normalSeg(sg, sent));
+      };
+      sents.forEach((sent, si) => {
+        sent.split(/[、,!?]/).forEach(cl0 => {
+          let cl = stripFill(cl0);
+          if(!cl) return;
+          if(ctx.pending && ctx.last){ corrChunk(cl, si); return; }
+          const marks = []; let mm; COR_RE.lastIndex = 0;
+          while((mm = COR_RE.exec(cl))) marks.push({ i: mm.index, e: mm.index + mm[0].length });
+          if(!marks.length || !ctx.last && !stripFill(cl.slice(0, marks[0].i))){
+            // 直す相手が居ないときは普通の文として扱う（マーカーだけ除く）
+            const plain = marks.length ? cl.replace(COR_RE, " ") : cl;
+            segment(stripFill(plain)).forEach(sg => normalSeg(sg, si)); return;
+          }
+          const head = stripFill(cl.slice(0, marks[0].i));
+          if(head) segment(head).forEach(sg => normalSeg(sg, si));
+          marks.forEach((mk, k) => corrChunk(cl.slice(mk.e, k + 1 < marks.length ? marks[k + 1].i : cl.length), si));
+        });
+      });
+      // 数量のあとに残った未処理の動詞だけの文は無視。ここから部材の照合
+      items.forEach(it => {
+        it.name = it.name.replace(/\s+/g, " ").trim();
+        const r = it.name ? matchName(it.name, mats) : { status: "none", id: null, score: 0, gap: 0, cands: [] };
+        it.status = r.status; it.id = r.id; it.score = r.score; it.cands = r.cands;
+      });
+      // 使った/入った/残り の決定: 自分の動詞 → 同じ文の後ろの動詞 → 前から引き継ぎ → 既定=使った
+      const resolved = [];
+      events.forEach((ev, i) => {
+        if(ev.kind){ ev.kindFrom = "own"; resolved[i] = ev.kind; return; }
+        let j = -1;
+        for(let k = i + 1; k < events.length; k++){ if(events[k].sent !== ev.sent) break; if(events[k].kind){ j = k; break; } }
+        if(j >= 0){ ev.kind = events[j].kind; ev.kindFrom = "next"; }
+        else {
+          let p = -1; for(let k = i - 1; k >= 0; k--){ if(resolved[k]){ p = k; break; } }
+          if(p >= 0){ ev.kind = resolved[p]; ev.kindFrom = "prev"; } else { ev.kind = "use"; ev.kindFrom = "default"; }
+        }
+        resolved[i] = ev.kind;
+      });
+      const nOk = items.filter(x => x.status === "ok").length, nCand = items.filter(x => x.status === "cand").length;
+      const total = items.reduce((n, x) => n + (x.status === "ok" ? 1 + x.score : x.status === "cand" ? 0.3 * x.score : 0), 0);
+      return { items, nOk, nCand, total };
+    }
+
+    // 入力は文字列、または認識候補の配列。候補ごとに解釈して「部材が一番多く見つかった」ものを採用する
+    function parseVoice(input, mats, opts){
+      const list = (Array.isArray(input) ? input : [input]).map(x => String(x == null ? "" : x)).filter(x => x.trim());
+      if(!list.length) return { items: [], text: "", alt: 0, altCount: 0 };
+      let best = null, bi = 0;
+      list.forEach((t, i) => {
+        const r = parseOne(t, mats);
+        if(!best || r.nOk > best.nOk || (r.nOk === best.nOk && r.total > best.total + 1e-9)){ best = r; bi = i; }
+      });
+      return { items: best.items, text: list[bi], alt: bi, altCount: list.length };
+    }
+    return { parseVoice, parseOne, matchName, rankMats, convNums, kanjiVal, vkey, skey, relax, approxSub };
+  })();
+  if(typeof module !== "undefined" && module.exports) module.exports = VoiceParser;
+
+  // =====================================================================
+  // v1.0 追加: 声で入力（話した/打った日本語 → 入出庫ファイル(hw-parts-ops v1) → いつものプレビュー）
+  // 取り込みは既存の流れそのまま（プレビュー確認 → 取り込む → 8秒取り消し／二重取り込み防止）。
+  // 文章の解釈は VoiceParser（通信なし）。マイクボタンだけ Web Speech API（Android Chromeはネット必須）。
+  // =====================================================================
+  const VC_KINDS = [["use", "使った −"], ["add", "入った ＋"], ["count", "数えた ＝"]];
+  const todayStr = () => { const d = new Date(); return d.getFullYear() + "-" + p2(d.getMonth() + 1) + "-" + p2(d.getDate()); };
+  function voiceHash(s){ let h = 5381; for(let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); }
+  const vcQtyOf = v => { const s = nfkc(String(v == null ? "" : v)).replace(/[,\s]/g, ""); if(!s) return null; const n = Number(s); return isFinite(n) && n >= 0 ? r1(n) : null; };
+
+  // 覚える別名: 話した言葉。末尾が部材のサイズと同じなら、サイズを外して「呼び名」だけ覚える
+  function voiceLearnWord(it, m){
+    let w = nfkc(it.word || "").replace(/[\s\u3000]+/g, " ").trim();
+    const mt = w.match(/[\s]*[\d.]+\s*(?:a|mm|m)?(?:\s*[x×]\s*[\d.]+\s*(?:a|mm|m)?)*$/i);
+    if(mt && m && m.size && skey(mt[0]) === skey(m.size)){ const rest = w.slice(0, w.length - mt[0].length).trim(); if(skey(rest).length >= 2) w = rest; }
+    return w.slice(0, 40);
+  }
+  function voiceOp(it){
+    const op = { kind: it.kind };
+    if(it.id != null) op.id = it.id; else op.name = it.word;
+    if(it.qty != null) op.qty = it.qty;
+    op.note = ("声「" + it.word + "」").slice(0, 60);
+    if(it.id != null && it.learn){ const m = materials.find(x => x.id === it.id); const w = voiceLearnWord(it, m); if(w) op.aliases = [w]; }
+    return op;
+  }
+  // プレビュー用の行に、声ならではの注意書きを足す
+  function voiceDecorate(file, rows, on){
+    rows.forEach(r => {
+      const it = file.voice.items[r.i]; if(!it) return;
+      const w = esc(it.word || "");
+      if(it.id == null){
+        r.st = "err"; r.m = null; r.msgs = [{ c: "e", t: it.status === "cand" ? `「${w}」は候補が複数あります。下の「部材」から選んでね` : (it.word ? `「${w}」は未検出です。下の「部材」から選んでね` : "部材名が聞き取れませんでした。下の「部材」から選んでね") }];
+        return;
+      }
+      if(r.st === "err" && it.qty == null) r.msgs = [{ c: "e", t: "数量が聞き取れませんでした。下の「数量」に入れてね" }];
+      if(r.m && r.st !== "err"){
+        if(it.status === "cand" && !it.picked){ r.st = "warn"; r.defOn = false; r.msgs.push({ c: "w", t: `「${w}」から推定しました。合っていればチェックを入れてね` }); }
+        if(it.unitKind === "len" && r.m.mode !== "length") r.msgs.push({ c: "w", t: "「メートル」と言われましたが、この部材は個数で数えます。数量を確認してね" });
+        if(it.unitKind === "cnt" && r.m.mode === "length") r.msgs.push({ c: "w", t: "この部材はメートルで数えます（数量はm）。「" + esc(String(it.qty) + it.unit) + "」を " + esc(String(it.qty)) + "m として扱っています。違えば数量を直してね" });
+      }
+      if(it.corr) r.msgs.push({ c: "", t: `言い直し: ${it.corr.from} → ${it.corr.to} に直しました` });
+      if(it.corrItem) r.msgs.push({ c: "", t: `言い直し: 「${esc(it.corrItem.from)}」→「${esc(it.corrItem.to)}」に直しました` });
+      if(it.kindFrom === "default" && !it.kindEdited) r.msgs.push({ c: "w", t: "「使った」「入った」などの言葉がなかったので「使った（引く）」にしています。違えば下で変えてね" });
+    });
+  }
+  function voiceInit(file, rows, on){
+    voiceDecorate(file, rows, on);
+    rows.forEach(r => { const it = file.voice.items[r.i]; on[r.i] = r.st !== "err" && r.defOn; });
+  }
+  function voiceRebuild(file, prev, on){
+    const wasErr = prev.map(r => r.st === "err");
+    file.ops = file.voice.items.map(voiceOp);
+    const rows = buildPlan(file);
+    voiceDecorate(file, rows, on);
+    rows.forEach((r, i) => {
+      if(r.st === "err") on[i] = false;
+      else if(wasErr[i] || on[i] === undefined) on[i] = r.defOn !== false;
+    });
+    return rows;
+  }
+  function voiceRowHtml(file, r, on){
+    const it = file.voice.items[r.i];
+    const m = it.id != null ? materials.find(x => x.id === it.id) : null;
+    const unit = m ? (m.mode === "length" ? "m" : "個") : (it.unit || "");
+    const seg = VC_KINDS.map(k => `<button type="button" class="vk${it.kind === k[0] ? " on" : ""}" data-vk="${k[0]}" aria-pressed="${it.kind === k[0]}">${k[1]}</button>`).join("");
+    const candIds = new Set((it.cands || []).map(c => c.id));
+    const optOf = x => `<option value="${x.id}"${x.id === it.id ? " selected" : ""}>${esc(dispName(x))}（No.${x.id}）</option>`;
+    const cands = (it.cands || []).map(c => materials.find(x => x.id === c.id)).filter(Boolean);
+    const cats = []; const byc = {};
+    materials.forEach(x => { if(!byc[x.cat]){ byc[x.cat] = []; cats.push(x.cat); } byc[x.cat].push(x); });
+    const sel = `<select class="vm" aria-label="部材を選ぶ"><option value=""${it.id == null ? " selected" : ""}>— 部材を選んでください —</option>
+      ${cands.length ? `<optgroup label="候補">${cands.map(optOf).join("")}</optgroup>` : ""}
+      ${cats.map(c => `<optgroup label="${esc(c)}">${byc[c].map(optOf).join("")}</optgroup>`).join("")}</select>`;
+    let learn = "";
+    if(it.picked && m){ const w = voiceLearnWord(it, m); if(w) learn = `<label class="vl"><input type="checkbox" class="vlearn"${it.learn ? " checked" : ""}> 「${esc(w)}」を ${esc(dispName(m))} の別名に覚える</label>`; }
+    return `<div class="vrow" data-vi="${r.i}">${rowHtml(r, on)}<div class="vctl">
+      <div class="v-said">聞き取り: 「${esc(it.word || "（名前なし）")}」${it.unit ? "・" + esc(String(it.qty == null ? "" : it.qty) + it.unit) : ""}</div>
+      <div class="v-seg" role="group" aria-label="使った・入った・数えた">${seg}</div>
+      <div class="v-line"><label class="v-q">数量 <input type="text" inputmode="decimal" class="vq" value="${it.qty == null ? "" : esc(String(it.qty))}" placeholder="数" aria-label="数量" autocomplete="off"> <span class="v-u">${esc(unit)}</span></label></div>
+      <div class="v-line">${sel}</div>${learn}</div></div>`;
+  }
+  function voiceHead(file){
+    return `<div>聞き取り: <b>「${esc(file.voice.text)}」</b></div>${file.voice.altCount > 1 ? `<div style="opacity:.7;">（認識の候補 ${file.voice.altCount} 件のうち ${file.voice.alt + 1} 番目を採用）</div>` : ""}`;
+  }
+  // プレビュー内の操作: 使った/入った/数えた の切り替え・数量・部材の選び直し・別名に覚える
+  function voiceBind(wrap, file, getRows, setRows, on, draw){
+    const items = file.voice.items;
+    const redo = () => { setRows(voiceRebuild(file, getRows(), on)); draw(); };
+    wrap.addEventListener("change", e => {
+      const row = e.target.closest(".vrow"); if(!row) return;
+      const it = items[Number(row.dataset.vi)]; if(!it) return;
+      if(e.target.classList.contains("vm")){
+        const v = e.target.value;
+        if(v){ it.id = Number(v); it.picked = true; it.learn = it.status === "none"; }
+        else { it.id = null; it.picked = false; it.learn = false; }
+        redo();
+      }else if(e.target.classList.contains("vq")){ it.qty = vcQtyOf(e.target.value); redo(); }
+      else if(e.target.classList.contains("vlearn")){ it.learn = e.target.checked; redo(); }
+    });
+    wrap.addEventListener("click", e => {
+      const b = e.target.closest(".vk"); if(!b) return;
+      const row = b.closest(".vrow"), it = items[Number(row.dataset.vi)]; if(!it) return;
+      it.kind = b.dataset.vk; it.kindEdited = true; redo();
+    });
+  }
+  // 「取り込む」を押した時点で、数量の入力欄に残っている値を取りこぼさず反映して、重複判定用の指紋も作り直す
+  function voiceFinalize(wrap, file, rows, on){
+    const items = file.voice.items; let ch = false;
+    wrap.querySelectorAll(".vrow").forEach(row => {
+      const it = items[Number(row.dataset.vi)], q = row.querySelector(".vq"); if(!it || !q) return;
+      const v = vcQtyOf(q.value); if(v !== it.qty){ it.qty = v; ch = true; }
+    });
+    if(ch) rows = voiceRebuild(file, rows, on);
+    file.hash = hashOps({ date: file.date, memo: file.memo, ops: file.ops });
+    return rows;
+  }
+
+  // ---- 文章 → プレビュー ----
+  let vcAlts = null;   // 直前の音声認識の候補 {text, list}
+  function vcStatus(msg, cls){ const s = $("vcStatus"); s.textContent = msg || ""; s.className = "vc-st" + (cls ? " " + cls : ""); }
+  function voiceInterpret(){
+    const raw = $("vcText").value.replace(/\s+$/g, "");
+    if(!raw.trim()){ vcStatus("話した内容が空です。話すか、文字で入れてね。", "w"); return; }
+    const input = vcAlts && vcAlts.text === raw.trim() ? vcAlts.list : raw;
+    const res = VoiceParser.parseVoice(input, materials);
+    const its = res.items.slice(0, 300);
+    if(!its.length){ vcStatus("部材と数量が見つかりませんでした。「エルボ20Aを3個使った」のように言ってみてね。", "w"); return; }
+    const items = its.map(x => ({ word: x.name, kind: x.kind, kindFrom: x.kindFrom, qty: x.qty, unit: x.unit, unitKind: x.unitKind, id: x.id, status: x.status, cands: x.cands, corr: x.corr, corrItem: x.corrItem, picked: false, learn: false, kindEdited: false }));
+    const date = todayStr(), memo = "声で入力";
+    const obj = { type: "hw-parts-ops", version: 1, id: "voice-" + date + "-" + voiceHash(res.text), date, memo, ops: items.map(voiceOp) };
+    const p = parseOps(JSON.stringify(obj), JSON.stringify(obj).length);
+    if(p.err){ opsErr(p.err); return; }
+    p.file.voice = { text: res.text, alt: res.alt, altCount: res.altCount, items };
+    vcStatus("");
+    handleOpsFile(p.file);
+  }
+  $("vcGo").addEventListener("click", voiceInterpret);
+
+  // ---- マイク（Web Speech API。ここだけネット必須。使えない時は理由を出して無効にする）----
+  (function(){
+    const btn = $("vcMic"), SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let rec = null, listening = false;
+    const base = "🎤 声で入力";
+    const setBtn = () => { btn.textContent = listening ? "■ とめる" : base; btn.classList.toggle("rec", listening); };
+    function avail(){
+      if(!SR){ btn.disabled = true; vcStatus("この端末のブラウザは、声の自動入力ボタンに対応していません。キーボードのマイク🎤で話すか、文字で入れてね。"); return false; }
+      return true;
+    }
+    function netNote(){ if(SR && navigator.onLine === false) vcStatus("今はネットにつながっていません。「声で入力」ボタンはネットが必要です。キーボードのマイク🎤なら電波がなくても使えます（言語パックが入っていれば）。", "w"); else if(SR && $("vcStatus").classList.contains("w") && /ネットにつながっていません/.test($("vcStatus").textContent)) vcStatus(""); }
+    window.addEventListener("offline", netNote); window.addEventListener("online", netNote);
+    avail();
+    btn.addEventListener("click", () => {
+      if(listening && rec){ try{ rec.stop(); }catch(e){} return; }
+      if(!avail()) return;
+      if(navigator.onLine === false){ netNote(); return; }
+      let got = null, err = "";
+      try{
+        rec = new SR(); rec.lang = "ja-JP"; rec.interimResults = true; rec.maxAlternatives = 5; rec.continuous = false;
+      }catch(e){ vcStatus("声の入力を始められませんでした。キーボードのマイク🎤を使ってね。", "w"); return; }
+      rec.onstart = () => { listening = true; setBtn(); vcStatus("聞いています…話してね"); };
+      rec.onresult = ev => {
+        const fin = [], interim = [];
+        for(let i = 0; i < ev.results.length; i++){ const r = ev.results[i]; (r.isFinal ? fin : interim).push(r); }
+        if(interim.length && !fin.length) vcStatus("聞き取り中: " + interim.map(r => r[0].transcript).join(""));
+        if(fin.length){
+          const n = Math.min(5, Math.max.apply(null, fin.map(r => r.length)));
+          const list = [];
+          for(let k = 0; k < n; k++){ const t = fin.map(r => (r[k] || r[0]).transcript).join(""); if(t.trim() && !list.includes(t)) list.push(t); }
+          got = list;
+        }
+      };
+      rec.onerror = ev => {
+        const c = ev && ev.error;
+        err = c === "not-allowed" || c === "service-not-allowed" ? "マイクの許可がありません。ブラウザのマイク許可をオンにするか、キーボードのマイク🎤を使ってね。"
+          : c === "network" ? "ネットにつながらないため、声のボタンは使えません。キーボードのマイク🎤で話してね。"
+          : c === "no-speech" ? "声が聞こえませんでした。もう一度ボタンを押して話してね。"
+          : c === "audio-capture" ? "マイクが見つかりません。"
+          : c === "aborted" ? "" : "うまく聞き取れませんでした（" + (c || "不明") + "）。";
+      };
+      rec.onend = () => {
+        listening = false; setBtn(); rec = null;
+        if(got && got.length){
+          const ta = $("vcText"), had = ta.value.trim();
+          const best = VoiceParser.parseVoice(got, materials), text = best.items.length ? best.text : got[0];
+          ta.value = had ? ta.value.replace(/\s+$/g, "") + "\n" + text : text;
+          vcAlts = had ? null : { text: text.trim(), list: got };
+          vcStatus("聞き取りました。内容を見て、よければ「解釈する」を押してね。", "ok");
+        }else vcStatus(err || "聞き取れませんでした。もう一度どうぞ。", err ? "w" : "");
+      };
+      try{ rec.start(); }catch(e){ listening = false; setBtn(); vcStatus("声の入力を始められませんでした。", "w"); }
+    });
+  })();
 
   loadState();   // v0.5: 保存済みの作業状態（部材・数量・税率）を復元してから描画
   render();
