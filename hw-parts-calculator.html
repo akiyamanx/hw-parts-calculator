@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  HW部材集計アプリ v1.3 (価格の更新年月・重複画面の価格表示 2026-11-03)
+  HW部材集計アプリ v1.4 (どの画面からもホームへ戻る 2026-11-03)
   HYPER Water 設置で使った部材と数量を集計するツール
   - 「HW工事材料.xlsx」の131部材を初期搭載(カテゴリ分け)
   - 個数部材: 単価 × 数量(プルダウン) = 金額
@@ -21,6 +21,7 @@
   ※v1.1: 右上「📋 工事価格表」。Excel(遂行費表)を一度選ぶと端末内(localStorage: hw_price_table_v1)だけに保存し、次回からすぐ表示・オフライン可。入れ替え/削除あり。価格データはリポに含めない。読込部品SheetJSは初回取り込み時のみCDNから取得
   ※v1.2: 箱・袋売り部材の「入数」(packQty/packUnit)。単価=購入金額÷入数(表示は小数2桁まで)、各行の金額=単価×使用数を1円未満四捨五入、合計は四捨五入後の行金額の合計。編集画面で商品名・規格・入数を変更可(参照はidなので名前変更で集計は崩れない)。入数なし=従来どおり(保存形式v:3のまま・項目追加のみ)。使用数は0〜50のプルダウンをやめて直接入力(数字キーボード・全角OK・負/不正は0・個数は整数)
   ※v1.3: 部材ごとに価格の更新年月 pu:"YYYY-MM" を記録(単価/購入金額/入数/購入長を変えた時・新規追加・取り込みの新規・基準価格の一括更新)。古いデータは pu なし=「更新日なし」(日付は作らない)。表示: 集計の行(更新済みのみ小さく)・編集画面・重複をまとめる画面。まとめる時は残す方の価格と更新年月のまま
+  ※v1.4: 全サブ画面(シート・棚卸し・集計表・工事価格表)に「← ホーム」。スマホの戻るボタン/ジェスチャーでもホーム(集計の部材表)へ(history.pushState)。サブ画面中は右上の工事価格表ボタンを隠し、ボタンは固定表示をやめてヘッダーと一緒にスクロール(重なり解消)
 -->
 <html lang="ja">
 <head>
@@ -504,7 +505,7 @@
         <path d="M12 2.5C12 2.5 5 10 5 14.5C5 18.5 8.13 21.5 12 21.5C15.87 21.5 19 18.5 19 14.5C19 10 12 2.5 12 2.5Z" fill="#0a9396"/>
         <path d="M9 14.5C9 16.16 10.34 17.5 12 17.5" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>
       </svg>
-      HW部材集計 <span style="font-size:10.5px;font-weight:700;color:var(--ink-soft);opacity:.7;margin-left:2px;">v1.3</span>
+      HW部材集計 <span style="font-size:10.5px;font-weight:700;color:var(--ink-soft);opacity:.7;margin-left:2px;">v1.4</span>
     </div>
     <div class="subtitle">HYPER Water 設置で使った部材を集計</div>
     <div class="price-date" id="priceDate"></div>
@@ -659,14 +660,14 @@
 
 <!-- 共通: ダイアログ・シート・棚卸し・元に戻すトースト(v0.8) -->
 <div class="cv" id="cv"></div>
-<div class="sheet" id="sheet"><div class="sheet-bar"><div class="sheet-title" id="sheetTitle"></div><button type="button" id="sheetClose">✕ とじる</button></div><div class="sheet-body" id="sheetBody"></div></div>
+<div class="sheet" id="sheet"><div class="sheet-bar"><div class="sheet-title" id="sheetTitle"></div><button type="button" id="sheetClose" class="home-btn">← ホーム</button></div><div class="sheet-body" id="sheetBody"></div></div>
 <div class="dlg" id="dlg"><div class="dlg-box"><div class="dlg-title" id="dlgTitle"></div><div class="dlg-body" id="dlgBody"></div><div class="dlg-btns" id="dlgBtns"></div></div></div>
 <div class="utoast" id="undoToast"><span id="utMsg"></span><button type="button" id="utBtn">元に戻す</button></div>
 
 <!-- 印刷用 集計表ビュー(マーフィード送付用) -->
 <div class="print-view" id="printView">
   <div class="pv-toolbar">
-    <button class="pv-close" id="pvClose">✕ 閉じる</button>
+    <button class="pv-close" id="pvClose">← ホーム</button>
     <button class="pv-edit" id="pvEdit" type="button">✎ 編集</button>
     <button class="pv-print" id="pvPrint">
       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
@@ -1800,7 +1801,7 @@
     }
     const rows = list.map((m, i) => `<div class="cv-li${!cnt.done && i === cnt.idx ? " cur" : ""}" data-i="${i}"><span class="a">${esc(dispName(m))}</span>
       <span class="b ${isCounted(m) ? "ok" : "un"}">${isCounted(m) ? "✓ " + (m.stock == null ? 0 : m.stock) : "未"}</span></div>`).join("");
-    $("cv").innerHTML = `<div class="cv-top"><div class="cv-row1"><div class="cv-prog-txt">${cdone}/${all.length} 数えた</div><button type="button" class="cv-close" id="cvClose">✕ とじる</button></div>
+    $("cv").innerHTML = `<div class="cv-top"><div class="cv-row1"><div class="cv-prog-txt">${cdone}/${all.length} 数えた</div><button type="button" class="cv-close" id="cvClose">← ホーム</button></div>
       <div class="bar"><i style="width:${all.length ? Math.round(cdone / all.length * 100) : 0}%"></i></div></div>
       <div class="cv-in"><div class="chips">${chips}</div>${card}<div class="cv-list">${rows}</div></div>`;
     const cur = $("cv").querySelector(".cv-li.cur"); if(cur && false) cur.scrollIntoView();
@@ -2996,7 +2997,7 @@
 </script>
 <!-- ===== v1.1 追加: 工事価格表（端末内だけに保存・リポには価格を一切入れない） ===== -->
 <style>
-  .pt-open{position:fixed;top:10px;right:10px;z-index:900;border:none;border-radius:20px;padding:8px 13px;font-size:13px;font-weight:800;background:var(--accent);color:#fff;box-shadow:0 2px 8px rgba(0,0,0,.18);font-family:inherit;}
+  .pt-open{position:absolute;top:10px;right:10px;z-index:900;border:none;border-radius:20px;padding:8px 13px;font-size:13px;font-weight:800;background:var(--accent);color:#fff;box-shadow:0 2px 8px rgba(0,0,0,.18);font-family:inherit;}
   .pt-ov{position:fixed;inset:0;z-index:2000;background:#fff;display:none;flex-direction:column;}
   .pt-ov.on{display:flex;}
   .pt-bar{display:flex;align-items:center;gap:6px;padding:10px;border-bottom:1px solid var(--line);background:var(--bg);flex-wrap:wrap;}
@@ -3021,7 +3022,7 @@
   <div class="pt-bar"><b>📋 工事価格表</b>
     <button type="button" id="ptReplace">新しい表に入れ替える</button>
     <button type="button" id="ptDel">削除</button>
-    <button type="button" class="pt-x" id="ptClose">閉じる</button></div>
+    <button type="button" class="pt-x" id="ptClose">← ホーム</button></div>
   <div class="pt-meta" id="ptMeta"></div>
   <div class="pt-body" id="ptBody"></div>
   <input type="file" id="ptFile" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="display:none">
@@ -3104,6 +3105,35 @@
   $('ptReplace').onclick=pick;
   $('ptDel').onclick=function(){if(confirm('この端末に保存した工事価格表を削除しますか？\n（元のExcelファイルは消えません）')){localStorage.removeItem(KEY);render(null);}};
 })();
+// v1.4: どの画面からもホーム(集計の部材表)へ戻る ＋ 端末の「戻る」対応
+(function(){
+  var $=function(id){return document.getElementById(id);};
+  var isOpen=function(){return ['sheet','cv','printView','dlg'].some(function(id){return $(id)&&$(id).classList.contains('open');})||$('ptOv').classList.contains('on');};
+  function closeAll(){
+    if($('dlg').classList.contains('open')) $('dlg').classList.remove('open');
+    if($('ptOv').classList.contains('on')) $('ptClose').onclick();
+    if($('printView').classList.contains('open')) { $('printView').classList.remove('open'); }
+    if($('cv').classList.contains('open')) { var c=$('cvClose'); if(c) c.click(); else $('cv').classList.remove('open'); }
+    if($('sheet').classList.contains('open')) { $('sheet').classList.remove('open'); }
+    document.body.style.overflow='';
+  }
+  function goHome(){ closeAll(); if(!$('segCollect').classList.contains('on')) $('segCollect').click(); }
+  var sync=function(){
+    var o=isOpen(); document.body.classList.toggle('sub-open',o);
+    var st=history.state&&history.state.hwSub;
+    if(o && !st) history.pushState({hwSub:1},'');
+    else if(!o && st) history.back();   // 画面内の閉じる操作で閉じた時は履歴も戻す
+  };
+  var mo=new MutationObserver(sync);
+  ['sheet','cv','printView','dlg','ptOv'].forEach(function(id){mo.observe($(id),{attributes:true,attributeFilter:['class']});});
+  window.addEventListener('popstate',function(){ if(isOpen()) goHome(); document.body.classList.toggle('sub-open',isOpen()); });
+  // 「← ホーム」は在庫タブから開いた画面でも部材表へ
+  ['sheetClose','pvClose','ptClose'].forEach(function(id){$(id).addEventListener('click',function(){ setTimeout(goHome,0); });});
+  document.addEventListener('click',function(e){ if(e.target&&e.target.id==='cvClose') setTimeout(goHome,0); });
+  if(history.state&&history.state.hwSub) history.replaceState(null,'');
+})();
 </script>
+<style>body.sub-open .pt-open{display:none;}
+  .home-btn,#pvClose,#ptClose,#cvClose{font-weight:800!important;}</style>
 </body>
 </html>
