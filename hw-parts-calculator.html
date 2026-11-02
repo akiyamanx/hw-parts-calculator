@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  HW部材集計アプリ v1.1 (工事価格表ボタン 2026-11-02)
+  HW部材集計アプリ v1.2 (箱・袋売りの入数 2026-11-02)
   HYPER Water 設置で使った部材と数量を集計するツール
   - 「HW工事材料.xlsx」の131部材を初期搭載(カテゴリ分け)
   - 個数部材: 単価 × 数量(プルダウン) = 金額
@@ -19,6 +19,7 @@
   ※v0.9: 別名(検索/名前合わせ)・購入先メモ・「ファイルを取り込む(入出庫)」(hw-parts-ops v1 のJSON。プレビュー→OK→8秒取り消し・二重取り込み防止)。保存形式 v:2→v:3(自動移行)。
   ※v1.0: 在庫タブに「声で入力」。話した/打った日本語を入出庫(hw-parts-ops v1)に変えて、いつものプレビュー→取り込む→8秒取り消し・二重取り込み防止に流す。言い直し(間違えた12個だった)・別名の学習に対応。解釈はこの中だけで完結(通信なし)。マイクボタンだけ Web Speech API(Android Chromeはネット必須)。保存形式は v0.9 と同じ v:3(変更なし)
   ※v1.1: 右上「📋 工事価格表」。Excel(遂行費表)を一度選ぶと端末内(localStorage: hw_price_table_v1)だけに保存し、次回からすぐ表示・オフライン可。入れ替え/削除あり。価格データはリポに含めない。読込部品SheetJSは初回取り込み時のみCDNから取得
+  ※v1.2: 箱・袋売り部材の「入数」(packQty/packUnit)。単価=購入金額÷入数(表示は小数2桁まで)、各行の金額=単価×使用数を1円未満四捨五入、合計は四捨五入後の行金額の合計。編集画面で商品名・規格・入数を変更可(参照はidなので名前変更で集計は崩れない)。入数なし=従来どおり(保存形式v:3のまま・項目追加のみ)
 -->
 <html lang="ja">
 <head>
@@ -115,6 +116,11 @@
   .ep-mode span{display:block;text-align:center;padding:8px;border:1.5px solid var(--line);border-radius:8px;font-size:13px;font-weight:700;color:var(--ink-soft);background:#fff;cursor:pointer;}
   .ep-mode input:checked + span{border-color:var(--accent);background:var(--accent);color:#fff;}
   .ep-fields{display:flex;gap:9px;}
+  .ep-name{margin-bottom:9px;}
+  .ep-f select,.pk-sel{width:100%;border:1.5px solid var(--line);border-radius:8px;padding:9px 6px;font-size:15px;color:var(--ink);font-family:inherit;background:#fff;}
+  .pk-chip{display:inline-block;font-size:11px;font-weight:700;color:#7a4b00;background:#fff1d6;border-radius:6px;padding:1px 6px;margin-right:4px;}
+  .pk-calc{margin-bottom:6px;}
+  .pk-u{font-size:12px;color:var(--ink-soft);font-weight:700;}
   .ep-f{flex:1;}
   .ep-f label{display:block;font-size:11px;font-weight:600;color:var(--ink-soft);margin-bottom:4px;}
   .ep-f input{width:100%;border:1.5px solid var(--line);border-radius:8px;padding:9px 10px;font-size:15px;color:var(--ink);font-family:inherit;font-variant-numeric:tabular-nums;}
@@ -492,7 +498,7 @@
         <path d="M12 2.5C12 2.5 5 10 5 14.5C5 18.5 8.13 21.5 12 21.5C15.87 21.5 19 18.5 19 14.5C19 10 12 2.5 12 2.5Z" fill="#0a9396"/>
         <path d="M9 14.5C9 16.16 10.34 17.5 12 17.5" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>
       </svg>
-      HW部材集計 <span style="font-size:10.5px;font-weight:700;color:var(--ink-soft);opacity:.7;margin-left:2px;">v1.1</span>
+      HW部材集計 <span style="font-size:10.5px;font-weight:700;color:var(--ink-soft);opacity:.7;margin-left:2px;">v1.2</span>
     </div>
     <div class="subtitle">HYPER Water 設置で使った部材を集計</div>
     <div class="price-date" id="priceDate"></div>
@@ -546,11 +552,17 @@
         <label id="newPriceLbl">単価(円)</label>
         <input type="number" id="newPrice" placeholder="59" inputmode="numeric" min="0">
       </div>
+      <div class="field" id="newPackWrap">
+        <label>入数(任意)</label>
+        <div style="display:flex;gap:4px;"><input type="number" id="newPackQty" placeholder="空=1個" inputmode="numeric" min="0" step="1" style="flex:1;min-width:0;">
+        <select id="newPackUnit" class="pk-sel" style="width:auto;flex:none;"></select></div>
+      </div>
       <div class="field" id="newLenWrap" style="display:none;">
         <label>購入長(m)</label>
         <input type="number" id="newLen" placeholder="100" inputmode="decimal" min="0" step="0.1">
       </div>
     </div>
+    <div class="ep-hint" id="newPackHint" style="margin:-4px 0 8px;"></div>
     <div class="field" id="newMeta" style="margin-bottom:12px;"></div>
     <div class="form-actions">
       <button class="btn-primary" id="saveBtn">追加する</button>
@@ -827,8 +839,15 @@
   const yen = n => "¥" + Math.round(n).toLocaleString("ja-JP");
   const yenU = n => "¥" + (Math.round(n*10)/10).toLocaleString("ja-JP");  // 1m単価(小数1桁)
   const esc = s => String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
-  const unitOf  = m => (m.mode==='length' && m.packLen>0) ? m.price/m.packLen : m.price;
-  const amountOf = m => (m.mode==='length' && m.packLen>0) ? (m.price/m.packLen)*m.qty : m.price*m.qty;
+  // v1.2: 箱・袋売り(入数 packQty>1)は price=箱/袋の購入金額、単価=購入金額÷入数
+  const PACK_UNITS = ["個","本","枚","巻","組","袋","セット"];
+  const isPack = m => m.mode !== 'length' && Number(m.packQty) > 1;
+  const pkU = m => m.packUnit || "個";
+  const unitOf  = m => (m.mode==='length' && m.packLen>0) ? m.price/m.packLen : (isPack(m) ? m.price/m.packQty : m.price);
+  // 丸め: 各行の金額 = 単価×使用数 を1円未満四捨五入。小計はその合計
+  const amountOf = m => Math.round(unitOf(m) * (Number(m.qty) || 0));
+  const yen2 = n => "¥" + (Math.round(n*100)/100).toLocaleString("ja-JP", { maximumFractionDigits: 2 });  // 単価(小数2桁まで)
+  const unitPriceTxt = m => m.mode==='length' ? `${yenU(unitOf(m))}/m` : (isPack(m) ? `${yen2(unitOf(m))}/${pkU(m)}` : yen(m.price));
 
   const listEl = document.getElementById("list");
   const searchEl = document.getElementById("search");
@@ -935,6 +954,7 @@
     const metaParts = [];
     if(m.size) metaParts.push(`<span class="size-tag">${esc(m.size)}</span>`);
     if(isLen) metaParts.push(`<span class="len-chip">m単位</span>`);
+    if(isPack(m)) metaParts.push(`<span class="pk-chip">${m.packQty}${esc(pkU(m))}入り</span>`);
     if(m.qty > 0 && deleteMode) metaParts.push(`<span class="use-chip">使用 ${m.qty}${isLen?"m":""}</span>`);
     if(m.stock != null) metaParts.push(`<span class="stk-chip${isShort(m)?" low":""}">在庫 ${m.stock}${isLen?"m":""}${isShort(m)?" ⚠":""}</span>`);
 
@@ -957,7 +977,15 @@
     }else{
       let opts = "";
       for(let i=0;i<=QTY_MAX;i++) opts += `<option value="${i}" ${i===m.qty?"selected":""}>${i}</option>`;
-      body = `
+      body = isPack(m) ? `
+        <div class="len-calc pk-calc">購入 ${priceBtn(m)} ÷ ${m.packQty}${esc(pkU(m))} <span class="um">＝ ${yen2(unitOf(m))}/${esc(pkU(m))}</span></div>
+        <div class="item-bottom">
+          <span class="pk-u">使用</span>
+          <select class="qty${m.qty>0?" active":""}" data-id="${m.id}">${opts}</select>
+          <span class="pk-u">${esc(pkU(m))}</span>
+          <span class="eq">=</span>
+          <span class="amount${amount===0?" zero":""}">${yen(amount)}</span>
+        </div>` : `
         <div class="item-bottom">
           ${priceBtn(m)}
           <span class="times">×</span>
@@ -990,7 +1018,7 @@
             ${metaParts.length?`<div class="item-meta">${metaParts.join("")}</div>`:""}
           </div>
           <div class="item-actions">
-            <button class="icon-btn edit" data-id="${m.id}" title="単価・数え方を編集">
+            <button class="icon-btn edit" data-id="${m.id}" title="商品名・単価・数え方を編集">
               <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
             </button>
           </div>
@@ -1004,18 +1032,30 @@
     const isLen = m.mode === 'length';
     return `
       <div class="edit-panel">
+        <div class="ep-fields ep-name">
+          <div class="ep-f" style="flex:2"><label>商品名</label><input type="text" class="ep-nm" value="${esc(m.name)}" autocomplete="off"></div>
+          <div class="ep-f"><label>規格(任意)</label><input type="text" class="ep-sz" value="${esc(m.size||"")}" autocomplete="off"></div>
+        </div>
         <div class="ep-modes">
           <label class="ep-mode"><input type="radio" name="epmode-${m.id}" value="piece" ${!isLen?"checked":""}><span>個数</span></label>
           <label class="ep-mode"><input type="radio" name="epmode-${m.id}" value="length" ${isLen?"checked":""}><span>メートル</span></label>
         </div>
         <div class="ep-fields">
           <div class="ep-f ep-price-f">
-            <label id="eplbl-${m.id}">${isLen?"購入金額(円)":"単価(円)"}</label>
+            <label id="eplbl-${m.id}">${(isLen||isPack(m))?"購入金額(円)":"単価(円)"}</label>
             <input type="number" class="ep-price" id="epprice-${m.id}" value="${m.price}" inputmode="numeric" min="0">
           </div>
           <div class="ep-f ep-len-f" style="${isLen?"":"display:none;"}">
             <label>購入長(m)</label>
             <input type="number" class="ep-len" id="eplen-${m.id}" value="${m.packLen||""}" inputmode="decimal" min="0" step="0.1">
+          </div>
+          <div class="ep-f ep-pk-f" style="${isLen?"display:none;":""}">
+            <label>入数(箱・袋売り)</label>
+            <input type="number" class="ep-pq" value="${isPack(m)?m.packQty:""}" placeholder="空=1個売り" inputmode="numeric" min="0" step="1">
+          </div>
+          <div class="ep-f ep-pk-f" style="flex:.7;${isLen?"display:none;":""}">
+            <label>単位</label>
+            <select class="ep-pu">${PACK_UNITS.map(u => `<option${u===pkU(m)?" selected":""}>${u}</option>`).join("")}</select>
           </div>
         </div>
         <div class="ep-hint" id="ephint-${m.id}"></div>
@@ -1064,7 +1104,11 @@
     listEl.querySelectorAll(".edit-panel").forEach(panel => {
       const id = editingId;
       const lenF = panel.querySelector(".ep-len-f");
-      const lbl = panel.querySelector(".ep-f label");
+      const lbl = panel.querySelector(`#eplbl-${id}`);
+      const pkFs = panel.querySelectorAll(".ep-pk-f");
+      const pqInp = panel.querySelector(".ep-pq"), puSel = panel.querySelector(".ep-pu");
+      const nmInp = panel.querySelector(".ep-nm"), szInp = panel.querySelector(".ep-sz");
+      const pqOf = () => { const q = Math.floor(parseFloat(pqInp.value)); return q > 1 ? q : 0; };
       const priceInp = panel.querySelector(".ep-price");
       const lenInp = panel.querySelector(".ep-len");
       const hint = panel.querySelector(".ep-hint");
@@ -1076,25 +1120,38 @@
         if(mode==='length'){
           const p = parseFloat(priceInp.value)||0, L = parseFloat(lenInp.value)||0;
           hint.textContent = (p>0 && L>0) ? `→ 1mあたり ${yenU(p/L)}` : "購入金額と購入長を入れてね";
-        }else hint.textContent = "";
+        }else{
+          const q = pqOf(), p = parseFloat(priceInp.value)||0;
+          lbl.textContent = q ? "購入金額(円)" : "単価(円)";
+          hint.textContent = q ? `→ 1${puSel.value}あたり ${yen2(p/q)}（${q}${puSel.value}入り ¥${p.toLocaleString("ja-JP")}）` : "";
+        }
       };
       panel.querySelectorAll(`input[name="epmode-${id}"]`).forEach(r => {
         r.addEventListener("change", () => {
           const isLen = panel.querySelector(`input[name="epmode-${id}"]:checked`).value==='length';
           lenF.style.display = isLen ? "" : "none";
+          pkFs.forEach(f => f.style.display = isLen ? "none" : "");
           lbl.textContent = isLen ? "購入金額(円)" : "単価(円)";
           updateHint();
         });
       });
       priceInp.addEventListener("input", updateHint);
       lenInp.addEventListener("input", updateHint);
+      pqInp.addEventListener("input", updateHint);
+      puSel.addEventListener("change", updateHint);
       panel.querySelector(".ep-cancel").addEventListener("click", () => { editingId = null; render(); });
       panel.querySelector(".ep-save").addEventListener("click", () => {
         const m = materials.find(x => x.id === id);
         if(!m) return;
         const mode = panel.querySelector(`input[name="epmode-${id}"]:checked`).value;
+        const newName = nmInp.value.trim();
+        if(!newName){ hint.textContent = "商品名は空にできないよ"; nmInp.focus(); return; }
         const price = Math.max(0, parseFloat(priceInp.value) || 0);
+        m.name = newName;               // 参照は id なので名前を変えても集計・在庫・履歴はそのまま
+        m.size = szInp.value.trim();
         setPrice(m, price);
+        if(mode !== 'length' && pqOf()){ m.packQty = pqOf(); m.packUnit = puSel.value; }
+        else { delete m.packQty; delete m.packUnit; }
         m.mode = mode;
         applyMeta(m, epMeta.get());
         if(mode==='length'){
@@ -1132,7 +1189,7 @@
       if(m.cat !== curCat){ curCat = m.cat; lines.push("■" + curCat); }
       const nm = m.name + (m.size ? "（"+m.size+"）" : "");
       if(m.mode==='length') lines.push(`  ${nm}　${m.qty}m × ${yenU(unitOf(m))}/m = ${yen(amountOf(m))}`);
-      else lines.push(`  ${nm}　${yen(m.price)} × ${m.qty} = ${yen(amountOf(m))}`);
+      else lines.push(`  ${nm}　${isPack(m) ? unitPriceTxt(m) + "（" + m.packQty + pkU(m) + "入り" + yen(m.price) + "）" : yen(m.price)} × ${m.qty}${isPack(m) ? pkU(m) : ""} = ${yen(amountOf(m))}`);
     });
     lines.push("", `小計　${yen(subtotal)}`, `消費税(${rate}%)　${yen(tax)}`, `総合計　${yen(subtotal + tax)}`);
     const text = lines.join("\n");
@@ -1170,10 +1227,22 @@
     r.addEventListener("change", () => {
       const isLen = document.querySelector('input[name="newMode"]:checked').value === 'length';
       document.getElementById("newLenWrap").style.display = isLen ? "" : "none";
-      document.getElementById("newPriceLbl").textContent = isLen ? "購入金額(円)" : "単価(円)";
+      document.getElementById("newPackWrap").style.display = isLen ? "none" : "";
+      newPackHint();
     });
   });
   addBtn.addEventListener("click", () => { addForm.classList.add("open"); addBtn.style.display="none"; document.getElementById("newName").focus(); });
+  // v1.2: 新規登録の入数(箱・袋売り)
+  document.getElementById("newPackUnit").innerHTML = PACK_UNITS.map(u => `<option>${u}</option>`).join("");
+  const newPackQ = () => { const q = Math.floor(parseFloat(document.getElementById("newPackQty").value)); return q > 1 ? q : 0; };
+  function newPackHint(){
+    const isLen = document.querySelector('input[name="newMode"]:checked').value === 'length';
+    const q = isLen ? 0 : newPackQ(), p = parseFloat(document.getElementById("newPrice").value) || 0, u = document.getElementById("newPackUnit").value;
+    document.getElementById("newPriceLbl").textContent = (isLen || q) ? "購入金額(円)" : "単価(円)";
+    document.getElementById("newPackHint").textContent = q ? `→ 1${u}あたり ${yen2(p/q)}（${q}${u}入り）` : "";
+  }
+  ["newPackQty","newPrice"].forEach(id => document.getElementById(id).addEventListener("input", newPackHint));
+  document.getElementById("newPackUnit").addEventListener("change", newPackHint);
   function closeForm(){
     resetAddMeta();
     addForm.classList.remove("open"); addBtn.style.display="flex";
@@ -1182,6 +1251,7 @@
     document.querySelector('input[name="newMode"][value="piece"]').checked = true;
     document.getElementById("newLenWrap").style.display = "none";
     document.getElementById("newPriceLbl").textContent = "単価(円)";
+    document.getElementById("newPackQty").value = ""; document.getElementById("newPackWrap").style.display = ""; document.getElementById("newPackHint").textContent = "";
   }
   document.getElementById("cancelBtn").addEventListener("click", closeForm);
   document.getElementById("saveBtn").addEventListener("click", () => {
@@ -1196,6 +1266,7 @@
     }
     const cat = newCatSel.value;
     const nm9 = { id:nextId++, cat, name, size:document.getElementById("newSize").value.trim(), mode, price, packLen, qty:0, cu:1 };
+    if(mode !== 'length' && newPackQ()){ nm9.packQty = newPackQ(); nm9.packUnit = document.getElementById("newPackUnit").value; }
     applyMeta(nm9, addMeta.get());
     materials.push(nm9);
     openCats[cat] = true;
@@ -1223,7 +1294,7 @@
       rows += `<tr class="pv-catrow"><td colspan="4">${esc(cat)}</td></tr>`;
       g.forEach(m => {
         const isLen = m.mode === 'length';
-        const unitTxt = isLen ? `${yenU(unitOf(m))}/m` : yen(m.price);
+        const unitTxt = unitPriceTxt(m);
         const qtyTxt = isLen ? `${m.qty}m` : `${m.qty}`;
         rows += `<tr>
           <td class="pv-nm">${esc(m.name)}${m.size?` <span class="pv-sz">(${esc(m.size)})</span>`:""}</td>
@@ -1354,6 +1425,10 @@
     if(Array.isArray(m.al)){ m.al = normAliases(m.al); if(!m.al.length) delete m.al; } else delete m.al;   // v0.9
     if(typeof m.shop === "string" && m.shop.trim()) m.shop = m.shop.trim().slice(0, 30); else delete m.shop;
     if(m.cu) m.cu = 1; else delete m.cu;
+    // v1.2: 入数(無い/1以下/変な値 → 項目ごと消す＝従来どおり1個単位)
+    const pq = Math.floor(Number(m.packQty));
+    if(m.mode !== 'length' && isFinite(pq) && pq > 1) m.packQty = pq; else delete m.packQty;
+    if(m.packQty && typeof m.packUnit === "string" && m.packUnit.trim()) m.packUnit = m.packUnit.trim().slice(0, 4); else delete m.packUnit;
   }
   // 手で変えた単価に目印(pe)を付ける: 初期データの部材で、価格が現在の基準価格と違うもの
   function markEditedPrices(list){
@@ -1501,7 +1576,7 @@
     return `<button type="button" class="price-btn" data-id="${m.id}" title="単価を変更"><span class="pv">${yen(m.price)}</span>${m.pe ? '<i class="pe-dot">●</i>' : ""}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button>`;
   }
   function priceEditRow(m){
-    const lbl = m.mode === "length" ? "購入金額(円)" : "単価(円)";
+    const lbl = (m.mode === "length" || isPack(m)) ? "購入金額(円)" : "単価(円)";
     return `<div class="pe-row" data-id="${m.id}"><label>${lbl}を変更</label>
       <div class="pe-line"><input type="text" class="pe-in" inputmode="numeric" value="${m.price}" aria-label="${lbl}">
       <button class="pe-ok" type="button">保存</button><button class="pe-no" type="button">やめる</button></div>
@@ -1828,7 +1903,7 @@
     return groups.filter(g => !(g.ids.length === 2 && dupIgnore.includes(pairKey(g.ids[0], g.ids[1]))));
   }
   function mergeInfo(m){
-    return `単価 ${yen(m.price)}${m.mode === "length" ? "(購入)" : ""} ／ 使用 ${m.qty}${unitTxt(m)} ／ 在庫 ${m.stock == null ? "未" : m.stock}${unitTxt(m)}`;
+    return `単価 ${yen(m.price)}${(m.mode === "length" || isPack(m)) ? "(購入)" : ""} ／ 使用 ${m.qty}${unitTxt(m)} ／ 在庫 ${m.stock == null ? "未" : m.stock}${unitTxt(m)}`;
   }
   function groupCard(g, gi, manual){
     const items = g.ids.map(id => materials.find(m => m.id === id)).filter(Boolean);
