@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  HW部材集計アプリ v1.0 (声で入力 2026-10-26)
+  HW部材集計アプリ v1.1 (工事価格表ボタン 2026-11-02)
   HYPER Water 設置で使った部材と数量を集計するツール
   - 「HW工事材料.xlsx」の131部材を初期搭載(カテゴリ分け)
   - 個数部材: 単価 × 数量(プルダウン) = 金額
@@ -18,6 +18,7 @@
   ※v0.8: 在庫タブ(在庫数・発注点・棚卸し・足りないもの・発注リスト・履歴)／使った分を在庫から引く／削除は名前入り確認+元に戻す／単価の行内編集(●=手で変更)／重複をまとめる／価格の基準日表示。保存形式は v:2(旧v:1は自動移行)
   ※v0.9: 別名(検索/名前合わせ)・購入先メモ・「ファイルを取り込む(入出庫)」(hw-parts-ops v1 のJSON。プレビュー→OK→8秒取り消し・二重取り込み防止)。保存形式 v:2→v:3(自動移行)。
   ※v1.0: 在庫タブに「声で入力」。話した/打った日本語を入出庫(hw-parts-ops v1)に変えて、いつものプレビュー→取り込む→8秒取り消し・二重取り込み防止に流す。言い直し(間違えた12個だった)・別名の学習に対応。解釈はこの中だけで完結(通信なし)。マイクボタンだけ Web Speech API(Android Chromeはネット必須)。保存形式は v0.9 と同じ v:3(変更なし)
+  ※v1.1: 右上「📋 工事価格表」。Excel(遂行費表)を一度選ぶと端末内(localStorage: hw_price_table_v1)だけに保存し、次回からすぐ表示・オフライン可。入れ替え/削除あり。価格データはリポに含めない。読込部品SheetJSは初回取り込み時のみCDNから取得
 -->
 <html lang="ja">
 <head>
@@ -491,7 +492,7 @@
         <path d="M12 2.5C12 2.5 5 10 5 14.5C5 18.5 8.13 21.5 12 21.5C15.87 21.5 19 18.5 19 14.5C19 10 12 2.5 12 2.5Z" fill="#0a9396"/>
         <path d="M9 14.5C9 16.16 10.34 17.5 12 17.5" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>
       </svg>
-      HW部材集計 <span style="font-size:10.5px;font-weight:700;color:var(--ink-soft);opacity:.7;margin-left:2px;">v1.0</span>
+      HW部材集計 <span style="font-size:10.5px;font-weight:700;color:var(--ink-soft);opacity:.7;margin-left:2px;">v1.1</span>
     </div>
     <div class="subtitle">HYPER Water 設置で使った部材を集計</div>
     <div class="price-date" id="priceDate"></div>
@@ -2892,6 +2893,117 @@
 
   loadState();   // v0.5: 保存済みの作業状態（部材・数量・税率）を復元してから描画
   render();
+</script>
+<!-- ===== v1.1 追加: 工事価格表（端末内だけに保存・リポには価格を一切入れない） ===== -->
+<style>
+  .pt-open{position:fixed;top:10px;right:10px;z-index:900;border:none;border-radius:20px;padding:8px 13px;font-size:13px;font-weight:800;background:var(--accent);color:#fff;box-shadow:0 2px 8px rgba(0,0,0,.18);font-family:inherit;}
+  .pt-ov{position:fixed;inset:0;z-index:2000;background:#fff;display:none;flex-direction:column;}
+  .pt-ov.on{display:flex;}
+  .pt-bar{display:flex;align-items:center;gap:6px;padding:10px;border-bottom:1px solid var(--line);background:var(--bg);flex-wrap:wrap;}
+  .pt-bar b{flex:1;font-size:15px;color:var(--ink);min-width:120px;}
+  .pt-bar button{border:1.5px solid var(--line);background:#fff;border-radius:8px;padding:7px 9px;font-size:12px;font-weight:700;font-family:inherit;color:var(--ink);}
+  .pt-bar .pt-x{background:var(--accent);color:#fff;border-color:var(--accent);}
+  .pt-meta{font-size:11px;color:var(--ink-soft);padding:6px 10px;}
+  .pt-body{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;padding:0 6px 30px;}
+  .pt-tbl{border-collapse:collapse;font-size:12px;color:var(--ink);}
+  .pt-tbl td{border:1px solid #c9d6db;padding:5px 6px;vertical-align:top;white-space:pre-wrap;min-width:52px;max-width:220px;}
+  .pt-tbl td.n{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;}
+  .pt-tbl td.w{min-width:170px;}
+  .pt-tbl td.h{background:#e3f1f2;font-weight:700;}
+  .pt-note{background:#fffbe9;border-left:3px solid #e9c46a;padding:6px 8px;margin:6px 0;font-size:12px;line-height:1.6;white-space:pre-wrap;color:var(--ink);position:sticky;left:0;max-width:calc(100vw - 12px);box-sizing:border-box;}
+  .pt-title{font-size:16px;font-weight:800;color:var(--ink);padding:12px 2px 6px;position:sticky;left:0;max-width:calc(100vw - 12px);}
+  .pt-tbl{margin-bottom:4px;}
+  .pt-empty{padding:30px 18px;text-align:center;color:var(--ink-soft);line-height:1.8;font-size:14px;}
+  .pt-empty button{margin-top:14px;border:none;background:var(--accent);color:#fff;border-radius:10px;padding:12px 18px;font-size:15px;font-weight:800;font-family:inherit;}
+</style>
+<button type="button" class="pt-open" id="ptOpen">📋 工事価格表</button>
+<div class="pt-ov" id="ptOv" role="dialog" aria-label="工事価格表">
+  <div class="pt-bar"><b>📋 工事価格表</b>
+    <button type="button" id="ptReplace">新しい表に入れ替える</button>
+    <button type="button" id="ptDel">削除</button>
+    <button type="button" class="pt-x" id="ptClose">閉じる</button></div>
+  <div class="pt-meta" id="ptMeta"></div>
+  <div class="pt-body" id="ptBody"></div>
+  <input type="file" id="ptFile" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="display:none">
+</div>
+<script>
+(function(){
+  // 表データはこの端末の localStorage にだけ保存（サーバー・リポには送らない）
+  var KEY='hw_price_table_v1';
+  var LIB='https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js';
+  var $=function(id){return document.getElementById(id);};
+  function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+  function load(){try{return JSON.parse(localStorage.getItem(KEY)||'null');}catch(e){return null;}}
+  function loadLib(){return new Promise(function(ok,ng){
+    if(window.XLSX)return ok(window.XLSX);
+    var s=document.createElement('script');s.src=LIB;s.onload=function(){ok(window.XLSX);};
+    s.onerror=function(){ng(new Error('読み込み部品を取得できませんでした（初回だけネットが必要です）'));};
+    document.head.appendChild(s);});}
+  function fmt(v){
+    if(v instanceof Date){return v.getFullYear()+'/'+(v.getMonth()+1)+'/'+v.getDate();}
+    if(typeof v==='number'){return Math.abs(v)>=1000?v.toLocaleString('ja-JP'):String(v);}
+    return v==null?'':String(v);}
+  // シート → {rows:[[セル文字]], merges:[{s:{r,c},e:{r,c}}]}（空の行・列は詰める）
+  function parse(X,buf,name){
+    var wb=X.read(buf,{type:'array',cellDates:true});
+    var ws=wb.Sheets[wb.SheetNames[0]];
+    var aoa=X.utils.sheet_to_json(ws,{header:1,raw:true,defval:null,blankrows:true});
+    var ref=X.utils.decode_range(ws['!ref']||'A1');
+    var R=aoa.length,C=0;aoa.forEach(function(r){C=Math.max(C,r.length);});
+    var merges=(ws['!merges']||[]).map(function(m){return{s:{r:m.s.r-ref.s.r,c:m.s.c-ref.s.c},e:{r:m.e.r-ref.s.r,c:m.e.c-ref.s.c}};});
+    var covered={};merges.forEach(function(m){for(var r=m.s.r;r<=m.e.r;r++)for(var c=m.s.c;c<=m.e.c;c++)covered[r+','+c]=1;});
+    var keepR=[],keepC=[];
+    for(var r=0;r<R;r++){if((aoa[r]||[]).some(function(v){return v!=null&&String(v).trim()!=='';}))keepR.push(r);}
+    for(var c=0;c<C;c++){if(aoa.some(function(row){return row&&row[c]!=null&&String(row[c]).trim()!=='';}))keepC.push(c);}
+    var rows=keepR.map(function(r){return keepC.map(function(c){var v=(aoa[r]||[])[c];return{t:fmt(v),n:typeof v==='number'};});});
+    // 結合は「残した行・列」に写し替える
+    var mr=[];merges.forEach(function(m){
+      var r0=keepR.indexOf(m.s.r),c0=keepC.indexOf(m.s.c);if(r0<0||c0<0)return;
+      var r1=r0,c1=c0;keepR.forEach(function(r,i){if(r<=m.e.r)r1=Math.max(r1,i);});keepC.forEach(function(c,i){if(c<=m.e.c)c1=Math.max(c1,i);});
+      if(r1>r0||c1>c0)mr.push({s:{r:r0,c:c0},e:{r:r1,c:c1}});});
+    return{v:1,name:name,sheet:wb.SheetNames[0],savedAt:new Date().toISOString(),rows:rows,merges:mr};}
+  function render(d){
+    var meta=$('ptMeta'),body=$('ptBody');
+    if(!d){meta.textContent='';$('ptDel').style.display='none';$('ptReplace').style.display='none';
+      body.innerHTML='<div class="pt-empty">まだ表が入っていません。<br>工事価格表（遂行費表）の Excel ファイルを選んでください。<br><small>表はこのスマホの中だけに保存されます（ネットには出ません）。次からはボタンを押すだけで見られます。</small><br><button type="button" id="ptFirst">📂 ファイルを選ぶ</button></div>';
+      $('ptFirst').onclick=pick;return;}
+    $('ptDel').style.display='';$('ptReplace').style.display='';
+    var at=new Date(d.savedAt);
+    meta.textContent=d.name+'（'+d.sheet+'）／ 取り込み: '+at.getFullYear()+'/'+(at.getMonth()+1)+'/'+at.getDate()+'　※横にスクロールできます';
+    var W=d.rows[0]?d.rows[0].length:0,skip={},span={};
+    d.merges.forEach(function(m){span[m.s.r+','+m.s.c]=m;for(var r=m.s.r;r<=m.e.r;r++)for(var c=m.s.c;c<=m.e.c;c++)if(r!==m.s.r||c!==m.s.c)skip[r+','+c]=1;});
+    var h='<table class="pt-tbl">';
+    d.rows.forEach(function(row,r){
+      var filled=row.filter(function(x){return x.t!=='';});
+      var hasMerge=row.some(function(x,c){return span[r+','+c]||skip[r+','+c];});
+      // 文字1つだけの行（※注記・見出し）は横いっぱいに
+      var allText=filled.length&&filled.every(function(x){return !x.n;});
+      var jt=filled.map(function(x){return x.t;}).join(' ');
+      if(allText&&!hasMerge&&(filled.length===1||/^[※例＜<]/.test(jt))){
+        var t=jt,cls=/^[※例＜<]/.test(t)?'note':(t.length<=20?'title':'note');
+        h+='</table><div class="pt-'+cls+'">'+esc(t)+'</div><table class="pt-tbl">';return;}
+      h+='<tr>';
+      row.forEach(function(x,c){
+        if(skip[r+','+c])return;var m=span[r+','+c],a='';
+        if(m)a=' rowspan="'+(m.e.r-m.s.r+1)+'" colspan="'+(m.e.c-m.s.c+1)+'"';
+        var cls=x.n?'n':(x.t&&r<4?'h':(x.t.length>14?'w':''));
+        h+='<td'+a+(cls?' class="'+cls+'"':'')+'>'+(cls==='w'?'<div style="min-width:170px">'+esc(x.t)+'</div>':esc(x.t))+'</td>';});
+      h+='</tr>';});
+    body.innerHTML=(h+'</table>').replace(/<table class="pt-tbl"><\/table>/g,'');}
+  function pick(){$('ptFile').value='';$('ptFile').click();}
+  $('ptFile').onchange=function(){
+    var f=this.files&&this.files[0];if(!f)return;
+    loadLib().then(function(X){return f.arrayBuffer().then(function(b){return parse(X,b,f.name);});})
+    .then(function(d){
+      if(!d.rows.length)throw new Error('表の中身が見つかりませんでした');
+      try{localStorage.setItem(KEY,JSON.stringify(d));}catch(e){throw new Error('保存できませんでした（容量不足の可能性）');}
+      render(d);})
+    .catch(function(e){alert('読み込めませんでした：'+e.message);});};
+  $('ptOpen').onclick=function(){render(load());$('ptOv').classList.add('on');};
+  $('ptClose').onclick=function(){$('ptOv').classList.remove('on');};
+  $('ptReplace').onclick=pick;
+  $('ptDel').onclick=function(){if(confirm('この端末に保存した工事価格表を削除しますか？\n（元のExcelファイルは消えません）')){localStorage.removeItem(KEY);render(null);}};
+})();
 </script>
 </body>
 </html>
