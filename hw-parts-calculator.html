@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  HW部材集計アプリ v1.2 (箱・袋売りの入数 2026-11-02)
+  HW部材集計アプリ v1.3 (価格の更新年月・重複画面の価格表示 2026-11-03)
   HYPER Water 設置で使った部材と数量を集計するツール
   - 「HW工事材料.xlsx」の131部材を初期搭載(カテゴリ分け)
   - 個数部材: 単価 × 数量(プルダウン) = 金額
@@ -20,6 +20,7 @@
   ※v1.0: 在庫タブに「声で入力」。話した/打った日本語を入出庫(hw-parts-ops v1)に変えて、いつものプレビュー→取り込む→8秒取り消し・二重取り込み防止に流す。言い直し(間違えた12個だった)・別名の学習に対応。解釈はこの中だけで完結(通信なし)。マイクボタンだけ Web Speech API(Android Chromeはネット必須)。保存形式は v0.9 と同じ v:3(変更なし)
   ※v1.1: 右上「📋 工事価格表」。Excel(遂行費表)を一度選ぶと端末内(localStorage: hw_price_table_v1)だけに保存し、次回からすぐ表示・オフライン可。入れ替え/削除あり。価格データはリポに含めない。読込部品SheetJSは初回取り込み時のみCDNから取得
   ※v1.2: 箱・袋売り部材の「入数」(packQty/packUnit)。単価=購入金額÷入数(表示は小数2桁まで)、各行の金額=単価×使用数を1円未満四捨五入、合計は四捨五入後の行金額の合計。編集画面で商品名・規格・入数を変更可(参照はidなので名前変更で集計は崩れない)。入数なし=従来どおり(保存形式v:3のまま・項目追加のみ)。使用数は0〜50のプルダウンをやめて直接入力(数字キーボード・全角OK・負/不正は0・個数は整数)
+  ※v1.3: 部材ごとに価格の更新年月 pu:"YYYY-MM" を記録(単価/購入金額/入数/購入長を変えた時・新規追加・取り込みの新規・基準価格の一括更新)。古いデータは pu なし=「更新日なし」(日付は作らない)。表示: 集計の行(更新済みのみ小さく)・編集画面・重複をまとめる画面。まとめる時は残す方の価格と更新年月のまま
 -->
 <html lang="ja">
 <head>
@@ -121,6 +122,8 @@
   .ep-fields{display:flex;gap:9px;}
   .ep-name{margin-bottom:9px;}
   .ep-f select,.pk-sel{width:100%;border:1.5px solid var(--line);border-radius:8px;padding:9px 6px;font-size:15px;color:var(--ink);font-family:inherit;background:#fff;}
+  .pu-chip{display:inline-block;font-size:10.5px;color:var(--ink-soft);background:#eef1f3;border-radius:6px;padding:1px 6px;margin-right:4px;}
+  .ep-pu-d{font-size:12px;color:var(--ink-soft);margin:2px 0 6px;}
   .pk-chip{display:inline-block;font-size:11px;font-weight:700;color:#7a4b00;background:#fff1d6;border-radius:6px;padding:1px 6px;margin-right:4px;}
   .pk-calc{margin-bottom:6px;}
   .pk-u{font-size:12px;color:var(--ink-soft);font-weight:700;}
@@ -501,7 +504,7 @@
         <path d="M12 2.5C12 2.5 5 10 5 14.5C5 18.5 8.13 21.5 12 21.5C15.87 21.5 19 18.5 19 14.5C19 10 12 2.5 12 2.5Z" fill="#0a9396"/>
         <path d="M9 14.5C9 16.16 10.34 17.5 12 17.5" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>
       </svg>
-      HW部材集計 <span style="font-size:10.5px;font-weight:700;color:var(--ink-soft);opacity:.7;margin-left:2px;">v1.2</span>
+      HW部材集計 <span style="font-size:10.5px;font-weight:700;color:var(--ink-soft);opacity:.7;margin-left:2px;">v1.3</span>
     </div>
     <div class="subtitle">HYPER Water 設置で使った部材を集計</div>
     <div class="price-date" id="priceDate"></div>
@@ -751,7 +754,7 @@
       if(!m || m.pe || m.cu || !(m.id in OLD_PRICES) || !(m.id in NEW_PRICES)) return;   // v0.8: pe=手で変えた価格は触らない
       const o = OLD_PRICES[m.id], n = NEW_PRICES[m.id];
       if(o === n) return;
-      if(m.price === o){ m.price = n; updated++; }
+      if(m.price === o){ m.price = n; m.pu = PRICE_REV.slice(0, 7); updated++; }
       else if(m.price !== n){ kept++; }   // 手動で変更された価格はそのまま
     });
     return { updated, kept };
@@ -858,6 +861,10 @@
   // 丸め: 各行の金額 = 単価×使用数 を1円未満四捨五入。小計はその合計
   const amountOf = m => Math.round(unitOf(m) * (Number(m.qty) || 0));
   const yen2 = n => "¥" + (Math.round(n*100)/100).toLocaleString("ja-JP", { maximumFractionDigits: 2 });  // 単価(小数2桁まで)
+  // v1.3: 価格の更新年月
+  const ymNow = () => { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0"); };
+  const puTxt = m => m.pu ? `${m.pu.slice(0, 4)}年${Number(m.pu.slice(5, 7))}月更新` : "更新日なし";
+  const priceSig = m => [m.mode, m.price, m.mode === 'length' ? m.packLen : (m.packQty || 1)].join("|");
   const unitPriceTxt = m => m.mode==='length' ? `${yenU(unitOf(m))}/m` : (isPack(m) ? `${yen2(unitOf(m))}/${pkU(m)}` : yen(m.price));
 
   const listEl = document.getElementById("list");
@@ -967,6 +974,7 @@
     if(isLen) metaParts.push(`<span class="len-chip">m単位</span>`);
     if(isPack(m)) metaParts.push(`<span class="pk-chip">${m.packQty}${esc(pkU(m))}入り</span>`);
     if(m.qty > 0 && deleteMode) metaParts.push(`<span class="use-chip">使用 ${m.qty}${isLen?"m":""}</span>`);
+    if(m.pu) metaParts.push(`<span class="pu-chip">${puTxt(m)}</span>`);
     if(m.stock != null) metaParts.push(`<span class="stk-chip${isShort(m)?" low":""}">在庫 ${m.stock}${isLen?"m":""}${isShort(m)?" ⚠":""}</span>`);
 
     { const ah = aliasHint(m, ($("search").value || "").trim()); if(ah) metaParts.push(`<span class="al-chip">別名: ${esc(ah)}</span>`); }
@@ -1067,6 +1075,7 @@
             <select class="ep-pu">${PACK_UNITS.map(u => `<option${u===pkU(m)?" selected":""}>${u}</option>`).join("")}</select>
           </div>
         </div>
+        <div class="ep-pu-d">💴 価格: ${puTxt(m)}</div>
         <div class="ep-hint" id="ephint-${m.id}"></div>
         <div class="ep-meta"></div>
         <div class="ep-actions">
@@ -1157,6 +1166,7 @@
         const newName = nmInp.value.trim();
         if(!newName){ hint.textContent = "商品名は空にできないよ"; nmInp.focus(); return; }
         const price = Math.max(0, parseFloat(priceInp.value) || 0);
+        const sig0 = priceSig(m);
         m.name = newName;               // 参照は id なので名前を変えても集計・在庫・履歴はそのまま
         m.size = szInp.value.trim();
         setPrice(m, price);
@@ -1168,6 +1178,7 @@
           const L = Math.max(0, parseFloat(lenInp.value) || 0);
           m.packLen = L;
         }
+        if(priceSig(m) !== sig0) m.pu = ymNow();   // v1.3: 価格・入数・購入長・数え方が変わったら更新年月
         editingId = null;
         saveState();
         render();
@@ -1277,6 +1288,7 @@
     const cat = newCatSel.value;
     const nm9 = { id:nextId++, cat, name, size:document.getElementById("newSize").value.trim(), mode, price, packLen, qty:0, cu:1 };
     if(mode !== 'length' && newPackQ()){ nm9.packQty = newPackQ(); nm9.packUnit = document.getElementById("newPackUnit").value; }
+    nm9.pu = ymNow();
     applyMeta(nm9, addMeta.get());
     materials.push(nm9);
     openCats[cat] = true;
@@ -1435,6 +1447,7 @@
     if(Array.isArray(m.al)){ m.al = normAliases(m.al); if(!m.al.length) delete m.al; } else delete m.al;   // v0.9
     if(typeof m.shop === "string" && m.shop.trim()) m.shop = m.shop.trim().slice(0, 30); else delete m.shop;
     if(m.cu) m.cu = 1; else delete m.cu;
+    if(!(typeof m.pu === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(m.pu))) delete m.pu;   // v1.3
     // v1.2: 入数(無い/1以下/変な値 → 項目ごと消す＝従来どおり1個単位)
     const pq = Math.floor(Number(m.packQty));
     if(m.mode !== 'length' && isFinite(pq) && pq > 1) m.packQty = pq; else delete m.packQty;
@@ -1464,6 +1477,7 @@
     return { r, changed };
   }
   function setPrice(m, p){
+    if(m.price !== p) m.pu = ymNow();   // v1.3
     m.price = p;
     if(m.id in NEW_PRICES && p !== NEW_PRICES[m.id]) m.pe = 1; else delete m.pe;
   }
@@ -1913,7 +1927,8 @@
     return groups.filter(g => !(g.ids.length === 2 && dupIgnore.includes(pairKey(g.ids[0], g.ids[1]))));
   }
   function mergeInfo(m){
-    return `単価 ${yen(m.price)}${(m.mode === "length" || isPack(m)) ? "(購入)" : ""} ／ 使用 ${m.qty}${unitTxt(m)} ／ 在庫 ${m.stock == null ? "未" : m.stock}${unitTxt(m)}`;
+    const buy = m.mode === "length" ? `（${m.packLen}m ${yen(m.price)}）` : isPack(m) ? `（${m.packQty}${esc(pkU(m))}入り ${yen(m.price)}）` : "";
+    return `<b class="mg-pr">現在価格 ${unitPriceTxt(m)}${buy}</b> <span class="pu-chip">${puTxt(m)}</span><br>使用 ${m.qty}${unitTxt(m)} ／ 在庫 ${m.stock == null ? "未" : m.stock}${unitTxt(m)}`;
   }
   function groupCard(g, gi, manual){
     const items = g.ids.map(id => materials.find(m => m.id === id)).filter(Boolean);
@@ -1980,7 +1995,7 @@
     openDlg({ title: "まとめる確認",
       html: `残す: <span class="nm">「${esc(dispName(keep))}」</span><ul>${li}</ul>
         <div class="dlg-warn" style="background:#e3f4f4;color:var(--accent-deep);">まとめたあと: 使用 ${sumQ}${unitTxt(keep)} ／ 在庫 ${anyStock ? sumS : "未"}${unitTxt(keep)}</div>
-        <div style="margin-top:9px;font-size:12px;color:var(--ink-soft);">単価は残す方のまま。まとめたあと約8秒間は「元に戻す」ができます。</div>`,
+        <div style="margin-top:9px;font-size:12px;color:var(--ink-soft);">単価と価格の更新年月は残す方のまま（${esc(puTxt(keep))}）。まとめたあと約8秒間は「元に戻す」ができます。</div>`,
       buttons: [{ t: "やめる", cls: "b-ghost" }, { t: "まとめる", cls: "b-pri", fn: () => doMerge(keepId, removeIds) }] });
   }
   function doMerge(keepId, removeIds){
@@ -2332,7 +2347,7 @@
       const note = r.note ? (memo ? memo + "／" + r.note : r.note) : (memo || "入出庫ファイル");
       if(r.kind === "newItem"){
         const o = r.nw;
-        const m = { id: nextId++, cat: o.cat, name: o.name, size: o.size, mode: o.mode, price: o.price, packLen: o.packLen, qty: 0, cu: 1 };
+        const m = { id: nextId++, cat: o.cat, name: o.name, size: o.size, mode: o.mode, price: o.price, packLen: o.packLen, qty: 0, cu: 1, pu: ymNow() };
         if(o.shop) m.shop = o.shop;
         if(o.al.length) m.al = o.al;
         if(o.reorder != null) m.reorder = o.reorder;
