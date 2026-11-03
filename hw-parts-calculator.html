@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  HW部材集計アプリ v1.4 (どの画面からもホームへ戻る 2026-11-03)
+  HW部材集計アプリ v1.5 (過去の集計・ボタン名を分かりやすく 2026-11-03)
   HYPER Water 設置で使った部材と数量を集計するツール
   - 「HW工事材料.xlsx」の131部材を初期搭載(カテゴリ分け)
   - 個数部材: 単価 × 数量(プルダウン) = 金額
@@ -22,6 +22,7 @@
   ※v1.2: 箱・袋売り部材の「入数」(packQty/packUnit)。単価=購入金額÷入数(表示は小数2桁まで)、各行の金額=単価×使用数を1円未満四捨五入、合計は四捨五入後の行金額の合計。編集画面で商品名・規格・入数を変更可(参照はidなので名前変更で集計は崩れない)。入数なし=従来どおり(保存形式v:3のまま・項目追加のみ)。使用数は0〜50のプルダウンをやめて直接入力(数字キーボード・全角OK・負/不正は0・個数は整数)
   ※v1.3: 部材ごとに価格の更新年月 pu:"YYYY-MM" を記録(単価/購入金額/入数/購入長を変えた時・新規追加・取り込みの新規・基準価格の一括更新)。古いデータは pu なし=「更新日なし」(日付は作らない)。表示: 集計の行(更新済みのみ小さく)・編集画面・重複をまとめる画面。まとめる時は残す方の価格と更新年月のまま
   ※v1.4: 全サブ画面(シート・棚卸し・集計表・工事価格表)に「← ホーム」。スマホの戻るボタン/ジェスチャーでもホーム(集計の部材表)へ(history.pushState)。サブ画面中は右上の工事価格表ボタンを隠し、ボタンは固定表示をやめてヘッダーと一緒にスクロール(重なり解消)
+  ※v1.5: 「過去の集計」= 集計表(印刷ビュー)の「💾 保存」で現場名・日付・明細(その時点の単価/数量/金額)・合計をスナップショット保存(state.jobs・最大300件・バックアップに含む)。一覧(新しい順・現場名/年月で検索)→詳細(読むだけ)→印刷/PDF・テキストコピー・削除。ボタン名: バックアップを保存／バックアップから元に戻す／在庫データを取り込む(説明1行つき)。「🦋 葵ちゃんと在庫を数えるとき」= 手順と葵ちゃんへのメッセージのコピー(docs/AOI_INVENTORY_GUIDE.md)
 -->
 <html lang="ja">
 <head>
@@ -232,6 +233,16 @@
   }
   /* データ管理ツール（数量リセット・バックアップ） v0.5追加 */
   .data-tools{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 4px;}
+  .data-btn.dx{flex:1 1 100%;white-space:normal;text-align:left;padding:11px 12px;}
+  .dx-sub{display:block;font-size:11.5px;font-weight:500;color:var(--ink-soft);margin-top:3px;line-height:1.45;}
+  @media (min-width:700px){ .data-btn.dx{flex:1 1 calc(50% - 8px);} }
+  .pv-toolbar .pv-save{flex:none;padding-left:12px;padding-right:12px;background:#fff1d6;color:#7a4b00;}
+  .jb-row{display:block;width:100%;text-align:left;border:1.5px solid var(--line);background:#fff;border-radius:11px;padding:11px 12px;margin:0 0 8px;font-family:inherit;cursor:pointer;}
+  .jb-row b{font-size:14.5px;color:var(--ink);} .jb-row .jb-s{display:flex;justify-content:space-between;font-size:12px;color:var(--ink-soft);margin-top:3px;}
+  .jb-row .jb-g{font-weight:800;color:var(--accent-deep);font-size:13.5px;}
+  .jb-tbl{width:100%;border-collapse:collapse;font-size:12.5px;} .jb-tbl td{padding:6px 4px;border-bottom:1px solid var(--line);vertical-align:top;} .jb-tbl td.r{text-align:right;white-space:nowrap;}
+  .jb-tbl tr.c td{background:#eef4f5;font-weight:800;color:var(--accent-deep);}
+  .jb-tot{margin-top:10px;font-size:13.5px;} .jb-tot div{display:flex;justify-content:space-between;padding:3px 0;} .jb-tot .g{font-weight:800;font-size:15.5px;border-top:2px solid var(--ink);margin-top:3px;padding-top:6px;}
   .data-btn{flex:1 1 auto;min-width:0;background:var(--surface);border:1.5px solid var(--line);border-radius:10px;padding:11px 8px;font-size:13px;font-weight:700;color:var(--ink);cursor:pointer;font-family:inherit;white-space:nowrap;transition:background .15s,border-color .15s;}
   .data-btn:hover{background:#eef4f5;}
   .data-btn:active{background:#e3f4f4;border-color:var(--accent);}
@@ -505,7 +516,7 @@
         <path d="M12 2.5C12 2.5 5 10 5 14.5C5 18.5 8.13 21.5 12 21.5C15.87 21.5 19 18.5 19 14.5C19 10 12 2.5 12 2.5Z" fill="#0a9396"/>
         <path d="M9 14.5C9 16.16 10.34 17.5 12 17.5" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>
       </svg>
-      HW部材集計 <span style="font-size:10.5px;font-weight:700;color:var(--ink-soft);opacity:.7;margin-left:2px;">v1.4</span>
+      HW部材集計 <span style="font-size:10.5px;font-weight:700;color:var(--ink-soft);opacity:.7;margin-left:2px;">v1.5</span>
     </div>
     <div class="subtitle">HYPER Water 設置で使った部材を集計</div>
     <div class="price-date" id="priceDate"></div>
@@ -582,10 +593,12 @@
     <button class="data-btn" id="deleteModeBtn" type="button">🗑️ 項目を削除</button>
     <button class="data-btn" id="mergeBtn" type="button">🔗 重複をまとめる</button>
     <button class="data-btn" id="resetQtyBtn" type="button">🧹 数量を全部リセット</button>
-    <button class="data-btn" id="exportBtn" type="button">⬇️ バックアップを書き出す</button>
-    <button class="data-btn" id="importBtn" type="button">⬆️ 読み込む</button>
+    <button class="data-btn dx" id="jobsBtn" type="button">📚 過去の集計<span class="dx-sub">保存した現場ごとの集計を見る・印刷・コピー</span></button>
+    <button class="data-btn dx" id="exportBtn" type="button">💾 バックアップを保存<span class="dx-sub">部材・価格・数量・在庫・過去の集計を1つのファイルにして保存（機種変更・もしもの時用）</span></button>
+    <button class="data-btn dx" id="importBtn" type="button">♻️ バックアップから元に戻す<span class="dx-sub">保存したバックアップファイルで、今のデータを全部置き換えます</span></button>
     <input type="file" id="importFile" accept="application/json,.json" style="display:none;">
-    <button class="data-btn" id="opsBtn" type="button">📥 ファイルを取り込む（入出庫）</button>
+    <button class="data-btn dx" id="opsBtn" type="button">📥 在庫データを取り込む<span class="dx-sub">葵ちゃんと在庫を数えたときに作ったファイル(.json)で、在庫を足し引き。今のデータは消えません</span></button>
+    <button class="data-btn dx aoi-help" type="button">🦋 葵ちゃんと在庫を数えるとき<span class="dx-sub">手順と、葵ちゃんに送るメッセージ（コピーできます）</span></button>
     <input type="file" id="opsFile" accept="application/json,.json" style="display:none;">
   </div>
   <!-- 削除モード中だけ出るボタン行 v0.6追加 -->
@@ -636,7 +649,7 @@
     <button class="st-btn" id="stOrder" type="button">🛒 発注リスト</button>
     <button class="st-btn" id="stHist" type="button">📜 履歴</button>
   </div>
-  <div class="st-actions second"><button class="st-btn" id="stImport" type="button">📥 ファイルを取り込む（入出庫）</button></div>
+  <div class="st-actions second"><button class="st-btn" id="stImport" type="button">📥 在庫データを取り込む</button><button class="st-btn aoi-help" type="button">🦋 葵ちゃんと在庫を数えるとき</button></div>
   <section class="vc-card" id="vcCard" aria-labelledby="vcH">
     <div class="vc-h" id="vcH">声で入力 <span class="vc-sub">話した内容を入出庫にします</span></div>
     <label class="vc-l" for="vcText">話した内容</label>
@@ -669,6 +682,7 @@
   <div class="pv-toolbar">
     <button class="pv-close" id="pvClose">← ホーム</button>
     <button class="pv-edit" id="pvEdit" type="button">✎ 編集</button>
+    <button class="pv-save" id="pvSave" type="button">💾 保存</button>
     <button class="pv-print" id="pvPrint">
       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
       印刷 / PDF
@@ -705,6 +719,7 @@
   let materials = [{"id": 1, "cat": "HIVP", "name": "HI　エルボ", "size": "20A", "mode": "piece", "price": 72, "packLen": 0, "qty": 0}, {"id": 2, "cat": "HIVP", "name": "HI　エルボ", "size": "25A", "mode": "piece", "price": 109, "packLen": 0, "qty": 0}, {"id": 3, "cat": "HIVP", "name": "HI　ソケット", "size": "20A", "mode": "piece", "price": 59, "packLen": 0, "qty": 0}, {"id": 4, "cat": "HIVP", "name": "HI　ソケット", "size": "25A", "mode": "piece", "price": 88, "packLen": 0, "qty": 0}, {"id": 5, "cat": "HIVP", "name": "HI　チーズ", "size": "20A", "mode": "piece", "price": 109, "packLen": 0, "qty": 0}, {"id": 6, "cat": "HIVP", "name": "HI　チーズ", "size": "25A", "mode": "piece", "price": 169, "packLen": 0, "qty": 0}, {"id": 7, "cat": "HIVP", "name": "HI　イケイソケット", "size": "20A×25A", "mode": "piece", "price": 86, "packLen": 0, "qty": 0}, {"id": 8, "cat": "HIVP", "name": "HI　45℃", "size": "20A", "mode": "piece", "price": 109, "packLen": 0, "qty": 0}, {"id": 9, "cat": "HIVP", "name": "ＨＩ　キャップ", "size": "20Ａ", "mode": "piece", "price": 52, "packLen": 0, "qty": 0}, {"id": 10, "cat": "HIVP", "name": "HI　バルブソケット（インサート付き）", "size": "20A", "mode": "piece", "price": 399, "packLen": 0, "qty": 0}, {"id": 11, "cat": "HIVP", "name": "HI　バルブソケット（インサート付き）", "size": "25A", "mode": "piece", "price": 639, "packLen": 0, "qty": 0}, {"id": 12, "cat": "HIVP", "name": "HI　ユニオン", "size": "20Ａ", "mode": "piece", "price": 1498, "packLen": 0, "qty": 0}, {"id": 13, "cat": "HIVP", "name": "ＨＩＶＰ20Ａ　4ｍ", "size": "20Ａ", "mode": "length", "price": 1598, "packLen": 4, "qty": 0}, {"id": 14, "cat": "鋼管", "name": "エルボ水道用樹脂コーティング管継手", "size": "15A", "mode": "piece", "price": 249, "packLen": 0, "qty": 0}, {"id": 15, "cat": "鋼管", "name": "チーズ水道用樹脂コーティング管継手", "size": "15A", "mode": "piece", "price": 399, "packLen": 0, "qty": 0}, {"id": 16, "cat": "鋼管", "name": "六角ニップル水道用樹脂コーティング管継手", "size": "15A", "mode": "piece", "price": 399, "packLen": 0, "qty": 0}, {"id": 17, "cat": "鋼管", "name": "エルボ水道用樹脂コーティング管継手", "size": "20A（PV）", "mode": "piece", "price": 299, "packLen": 0, "qty": 0}, {"id": 18, "cat": "鋼管", "name": "チーズ水道用樹脂コーティング管継手", "size": "20A（PV）", "mode": "piece", "price": 449, "packLen": 0, "qty": 0}, {"id": 19, "cat": "鋼管", "name": "ソケット水道用樹脂コーティング管継手", "size": "20A（PV）", "mode": "piece", "price": 399, "packLen": 0, "qty": 0}, {"id": 20, "cat": "鋼管", "name": "六角ニップル水道用樹脂コーティング管継手", "size": "20A（PV）", "mode": "piece", "price": 419, "packLen": 0, "qty": 0}, {"id": 21, "cat": "鋼管", "name": "ストリートエルボ", "size": "20A（PV）", "mode": "piece", "price": 999, "packLen": 0, "qty": 0}, {"id": 22, "cat": "鋼管", "name": "エルボ水道用樹脂コーティング管継手", "size": "25A", "mode": "piece", "price": 479, "packLen": 0, "qty": 0}, {"id": 23, "cat": "鋼管", "name": "チーズ水道用樹脂コーティング管継手", "size": "25A", "mode": "piece", "price": 699, "packLen": 0, "qty": 0}, {"id": 24, "cat": "鋼管", "name": "六角ニップル水道用樹脂コーティング管継手", "size": "25A", "mode": "piece", "price": 519, "packLen": 0, "qty": 0}, {"id": 25, "cat": "鋼管", "name": "ソケット水道用樹脂コーティング管継手", "size": "25A", "mode": "piece", "price": 499, "packLen": 0, "qty": 0}, {"id": 26, "cat": "鋼管", "name": "ストリートエルボ", "size": "25Ａ", "mode": "piece", "price": 1498, "packLen": 0, "qty": 0}, {"id": 27, "cat": "鋼管", "name": "ブッシング水道用樹脂コーティング管継ぎ手", "size": "20Ａ×15Ａ", "mode": "piece", "price": 659, "packLen": 0, "qty": 0}, {"id": 28, "cat": "鋼管", "name": "ブッシング水道用樹脂コーティング管継ぎ手", "size": "25A×20A", "mode": "piece", "price": 829, "packLen": 0, "qty": 0}, {"id": 29, "cat": "鋼管", "name": "径違いチーズ水道用樹脂コーティング管継手", "size": "25A×20A（PV）", "mode": "piece", "price": 849, "packLen": 0, "qty": 0}, {"id": 30, "cat": "鋼管", "name": "径違いエルボ水道用樹脂コーティング管継手", "size": "25A×20A（PV）", "mode": "piece", "price": 779, "packLen": 0, "qty": 0}, {"id": 31, "cat": "鋼管", "name": "短管ニップル100ミリ水道用樹脂コーティング継ぎ手", "size": "25A（PV）", "mode": "piece", "price": 989, "packLen": 0, "qty": 0}, {"id": 32, "cat": "鋼管", "name": "短管ニップル125ミリ水道用樹脂コーティング継ぎ手", "size": "25Ａ", "mode": "piece", "price": 999, "packLen": 0, "qty": 0}, {"id": 33, "cat": "鋼管", "name": "短管ニップル75ｍｍ水道用樹脂コーティング管継手", "size": "20A（PV）", "mode": "piece", "price": 589, "packLen": 0, "qty": 0}, {"id": 34, "cat": "鋼管", "name": "異型チーズ（コーティング）２０×15", "size": "20Ａ×15Ａ", "mode": "piece", "price": 629, "packLen": 0, "qty": 0}, {"id": 35, "cat": "鋼管", "name": "イケイチーズ（コーティング）２5×15", "size": "25Ａ×15Ａ", "mode": "piece", "price": 849, "packLen": 0, "qty": 0}, {"id": 36, "cat": "鋼管", "name": "ポンプ用ブッシング32Ａ×25Ａ", "size": "32×25", "mode": "piece", "price": 1298, "packLen": 0, "qty": 0}, {"id": 37, "cat": "鋼管", "name": "ポンプ用ブッシング32Ａ×20Ａ", "size": "32×20", "mode": "piece", "price": 1298, "packLen": 0, "qty": 0}, {"id": 38, "cat": "バルブ", "name": "ボールバルブエア抜き用蝶ハンドル", "size": "15Ａ", "mode": "piece", "price": 2498, "packLen": 0, "qty": 0}, {"id": 39, "cat": "バルブ", "name": "FMボールバルブG13A　白　メス-オス", "size": "15A", "mode": "piece", "price": 3698, "packLen": 0, "qty": 0}, {"id": 40, "cat": "バルブ", "name": "ニッケルメッキフルボアボールバルブ 蝶ハンドル　黄銅", "size": "20A", "mode": "piece", "price": 2298, "packLen": 0, "qty": 0}, {"id": 41, "cat": "バルブ", "name": "逆止弁付きボールバルブ　（メスメス　Ｒネジ）", "size": "20Ａ", "mode": "piece", "price": 2598, "packLen": 0, "qty": 0}, {"id": 42, "cat": "バルブ", "name": "ゲートバルブ20Ａ", "size": "20Ａ", "mode": "piece", "price": 1498, "packLen": 0, "qty": 0}, {"id": 43, "cat": "バルブ", "name": "ボールバルブ フルボア黄銅 （ポンプ後、レバータイプ）", "size": "25A", "mode": "piece", "price": 2198, "packLen": 0, "qty": 0}, {"id": 44, "cat": "ホースニップル", "name": "ホースニップル　内径１５用", "size": "15Ａ", "mode": "piece", "price": 229, "packLen": 0, "qty": 0}, {"id": 45, "cat": "ホースニップル", "name": "ナット付ホースニップル適合ホース内径15ミリ用　（16ｍｍ）", "size": "ねじ径20A", "mode": "piece", "price": 1098, "packLen": 0, "qty": 0}, {"id": 46, "cat": "ホースニップル", "name": "ナット付ホースニップル適合ホース内径19ミリ用　（20.5ｍｍ）", "size": "ねじ径20A", "mode": "piece", "price": 1098, "packLen": 0, "qty": 0}, {"id": 47, "cat": "ホースニップル", "name": "オスホースニップル20.5ｍｍ", "size": "20Ａ", "mode": "piece", "price": 699, "packLen": 0, "qty": 0}, {"id": 48, "cat": "ホースニップル", "name": "デカホースニップル　ホース内径25.4用", "size": "25Ａ", "mode": "piece", "price": 1498, "packLen": 0, "qty": 0}, {"id": 49, "cat": "ホースニップル", "name": "ナット付ホースニップル", "size": "25A", "mode": "piece", "price": 2098, "packLen": 0, "qty": 0}, {"id": 50, "cat": "フレキニップル", "name": "フレキ用ニップル[配管/ポンプ/空圧・油圧編]", "size": "20A", "mode": "piece", "price": 389, "packLen": 0, "qty": 0}, {"id": 51, "cat": "フレキニップル", "name": "フレキニップル25A", "size": "25A", "mode": "piece", "price": 1527, "packLen": 0, "qty": 0}, {"id": 52, "cat": "フレキニップル", "name": "異径フレキニップル　20A側平行ねじ", "size": "20A×13A", "mode": "piece", "price": 629, "packLen": 0, "qty": 0}, {"id": 53, "cat": "フレキニップル", "name": "異径フレキニップル　20A側平行ねじ", "size": "25Ａ-20Ａ", "mode": "piece", "price": 1398, "packLen": 0, "qty": 0}, {"id": 54, "cat": "固定足・バンド", "name": "鋼管支持金具　調整式２０Ａ用", "size": "20Ａ", "mode": "piece", "price": 819, "packLen": 0, "qty": 0}, {"id": 55, "cat": "固定足・バンド", "name": "蝶番式立バンド", "size": "20A", "mode": "piece", "price": 139, "packLen": 0, "qty": 0}, {"id": 56, "cat": "固定足・バンド", "name": "T足　　200ミリ", "size": "20Ａ", "mode": "piece", "price": 289, "packLen": 0, "qty": 0}, {"id": 57, "cat": "固定足・バンド", "name": "T足　　150ミリ", "size": "20Ａ", "mode": "piece", "price": 219, "packLen": 0, "qty": 0}, {"id": 58, "cat": "固定足・バンド", "name": "T足　　50ミリ", "size": "20Ａ", "mode": "piece", "price": 98, "packLen": 0, "qty": 0}, {"id": 59, "cat": "固定足・バンド", "name": "T足　　80ミリ", "size": "80×25", "mode": "piece", "price": 118, "packLen": 0, "qty": 0}, {"id": 60, "cat": "固定足・バンド", "name": "ステンレスサドルバンド　27ミリ", "size": "6分用", "mode": "piece", "price": 65, "packLen": 0, "qty": 0}, {"id": 61, "cat": "固定足・バンド", "name": "ステンレスサドルバンド　34ミリ", "size": "8分用", "mode": "piece", "price": 89, "packLen": 0, "qty": 0}, {"id": 62, "cat": "基本水栓・継手", "name": "２口水栓　基本セット　カチット、普通", "size": "13Ａ", "mode": "piece", "price": 7698, "packLen": 0, "qty": 0}, {"id": 63, "cat": "基本水栓・継手", "name": "水栓継手", "size": "１３×13", "mode": "piece", "price": 1998, "packLen": 0, "qty": 0}, {"id": 64, "cat": "電気部材", "name": "防雨型延長コード3つ口　3芯　１０メートル", "size": "１０メートル", "mode": "length", "price": 6398, "packLen": 10, "qty": 0}, {"id": 65, "cat": "電気部材", "name": "防雨形延長コード　1口　3芯　5メートル", "size": "5Ｍ", "mode": "length", "price": 2998, "packLen": 5, "qty": 0}, {"id": 66, "cat": "電気部材", "name": "プラグカッパー2　　２口コンセント用防雨キャップ", "size": "1", "mode": "piece", "price": 649, "packLen": 0, "qty": 0}, {"id": 67, "cat": "電気部材", "name": "変換アダプター　3Ｐ～2Ｐ　アース付き", "size": "1", "mode": "piece", "price": 289, "packLen": 0, "qty": 0}, {"id": 68, "cat": "電気部材", "name": "ミラフレキSS", "size": "50M", "mode": "length", "price": 7798, "packLen": 50, "qty": 0}, {"id": 69, "cat": "電気部材", "name": "フレキコネクタ", "size": "10個入り", "mode": "piece", "price": 899, "packLen": 0, "qty": 0}, {"id": 70, "cat": "電気部材", "name": "メーターパッキン", "size": "1個", "mode": "piece", "price": 39, "packLen": 0, "qty": 0}, {"id": 71, "cat": "電気部材", "name": "PC2005F(ギボシメス）", "size": "100個", "mode": "piece", "price": 2198, "packLen": 0, "qty": 0}, {"id": 72, "cat": "電気部材", "name": "PC2005M(ギボシオス）", "size": "100個", "mode": "piece", "price": 2198, "packLen": 0, "qty": 0}, {"id": 73, "cat": "電気部材", "name": "Y端子3ミリ", "size": "100個", "mode": "piece", "price": 679, "packLen": 0, "qty": 0}, {"id": 74, "cat": "電気部材", "name": "Y端子4ミリ", "size": "100個", "mode": "piece", "price": 679, "packLen": 0, "qty": 0}, {"id": 75, "cat": "電気部材", "name": "R2-4丸端子4ミリ", "size": "100個", "mode": "piece", "price": 689, "packLen": 0, "qty": 0}, {"id": 76, "cat": "電気部材", "name": "R2-5丸端子5ミリ", "size": "100個", "mode": "piece", "price": 689, "packLen": 0, "qty": 0}, {"id": 77, "cat": "電気部材", "name": "裸圧着スリーブR1.25", "size": "100個", "mode": "piece", "price": 669, "packLen": 0, "qty": 0}, {"id": 78, "cat": "電気部材", "name": "耐熱電線", "size": "100M", "mode": "length", "price": 2790, "packLen": 100, "qty": 0}, {"id": 79, "cat": "電気部材", "name": "収縮チューブ", "size": "1M", "mode": "length", "price": 77, "packLen": 1, "qty": 0}, {"id": 80, "cat": "電気部材", "name": "アース線", "size": "10M", "mode": "length", "price": 1590, "packLen": 10, "qty": 0}, {"id": 81, "cat": "電気部材", "name": "絶縁キャップ　(赤） 200V", "size": "100個", "mode": "piece", "price": 579, "packLen": 0, "qty": 0}, {"id": 82, "cat": "電気部材", "name": "絶縁キャップ　(白） 200V", "size": "100個", "mode": "piece", "price": 579, "packLen": 0, "qty": 0}, {"id": 83, "cat": "電気部材", "name": "絶縁キャップ　（黒）　200Ｖ", "size": "１００個", "mode": "piece", "price": 579, "packLen": 0, "qty": 0}, {"id": 84, "cat": "電気部材", "name": "絶縁キャップ　（緑）　200Ｖ", "size": "１００個", "mode": "piece", "price": 469, "packLen": 0, "qty": 0}, {"id": 85, "cat": "電気部材", "name": "ＶＣＴＦ　4×0.75ｍｍ　(３点フロート用)", "size": "100ｍ", "mode": "length", "price": 19980, "packLen": 100, "qty": 0}, {"id": 86, "cat": "電気部材", "name": "ＶＣＴＦ　2×0.75ｍｍ　(渇水フロート用)", "size": "100ｍ", "mode": "length", "price": 9498, "packLen": 100, "qty": 0}, {"id": 87, "cat": "その他", "name": "巻フレキパイプステンレス製[配管/ポンプ/空圧・油圧編]", "size": "20（10ｍ/巻）", "mode": "length", "price": 5498, "packLen": 10, "qty": 0}, {"id": 88, "cat": "その他", "name": "袋ナットパッキンセットフレキ用[配管/ポンプ/空圧・油圧編]", "size": "20A", "mode": "piece", "price": 479, "packLen": 0, "qty": 0}, {"id": 89, "cat": "その他", "name": "給水キャップ　13Ａ", "size": "13Ａ", "mode": "piece", "price": 289, "packLen": 0, "qty": 0}, {"id": 90, "cat": "その他", "name": "給水キャップ　20Ａ", "size": "20Ａ用", "mode": "piece", "price": 459, "packLen": 0, "qty": 0}, {"id": 91, "cat": "その他", "name": "ブレードホース　内径15外形22ミリ　１０メートル", "size": "1", "mode": "length", "price": 3098, "packLen": 10, "qty": 0}, {"id": 92, "cat": "その他", "name": "フレキ用ゴムパッキン　20Ａ　1袋５０枚", "size": "20Ａ用", "mode": "piece", "price": 579, "packLen": 0, "qty": 0}, {"id": 93, "cat": "その他", "name": "25Ａ　ゴムフレキパッキン　　（１枚）", "size": "25Ａ", "mode": "piece", "price": 149, "packLen": 0, "qty": 0}, {"id": 94, "cat": "その他", "name": "ゴム板　２０ｍｍ　100×100　（ＫＰ土台用）", "size": "20ｍｍ", "mode": "piece", "price": 659, "packLen": 0, "qty": 0}, {"id": 95, "cat": "その他", "name": "パテ200ｇ　アイボリー", "size": "200ｇ", "mode": "piece", "price": 109, "packLen": 0, "qty": 0}, {"id": 96, "cat": "その他", "name": "パテ　グレー（大）", "size": "1", "mode": "piece", "price": 499, "packLen": 0, "qty": 0}, {"id": 97, "cat": "その他", "name": "タイラップ200ミリ　4.8ミリ　100本", "size": "", "mode": "piece", "price": 519, "packLen": 0, "qty": 0}, {"id": 98, "cat": "その他", "name": "タイラップ380ミリ　7.5ミリ　100本", "size": "", "mode": "piece", "price": 1398, "packLen": 0, "qty": 0}, {"id": 99, "cat": "その他", "name": "タイラップ　白　３００ミリ　外用", "size": "1袋", "mode": "piece", "price": 789, "packLen": 0, "qty": 0}, {"id": 100, "cat": "その他", "name": "座付きノンプラグビス　コンクリ用１箱", "size": "１箱１５０本", "mode": "piece", "price": 719, "packLen": 0, "qty": 0}, {"id": 101, "cat": "その他", "name": "ステンレス　コンクリビス　4×25", "size": "200本", "mode": "piece", "price": 1598, "packLen": 0, "qty": 0}, {"id": 102, "cat": "その他", "name": "ステンレス　コンクリビス　4×32", "size": "170本", "mode": "piece", "price": 1598, "packLen": 0, "qty": 0}, {"id": 103, "cat": "その他", "name": "パッキン　13Ａ　（50枚入り）", "size": "13Ａ", "mode": "piece", "price": 469, "packLen": 0, "qty": 0}, {"id": 104, "cat": "その他", "name": "片ナットアダプター", "size": "20Ａ用", "mode": "piece", "price": 939, "packLen": 0, "qty": 0}, {"id": 105, "cat": "その他", "name": "裸圧着スリーブ　Ｅ小（2ｍｍ×2本用）20個入り", "size": "Ｅ小", "mode": "piece", "price": 179, "packLen": 0, "qty": 0}, {"id": 106, "cat": "その他", "name": "HI バルブソケット（インサート付き）", "size": "30A", "mode": "piece", "price": 1098, "packLen": 0, "qty": 0}, {"id": 107, "cat": "その他", "name": "HI バルブソケット（インサート付き）", "size": "40A", "mode": "piece", "price": 1398, "packLen": 0, "qty": 0}, {"id": 108, "cat": "その他", "name": "HI エルボ", "size": "40A", "mode": "piece", "price": 249, "packLen": 0, "qty": 0}, {"id": 109, "cat": "その他", "name": "HI 異形チーズ", "size": "40A×25A", "mode": "piece", "price": 339, "packLen": 0, "qty": 0}, {"id": 110, "cat": "その他", "name": "異型チーズ", "size": "40A×20A", "mode": "piece", "price": 339, "packLen": 0, "qty": 0}, {"id": 111, "cat": "その他", "name": "異形ソケット", "size": "40A×25A", "mode": "piece", "price": 179, "packLen": 0, "qty": 0}, {"id": 112, "cat": "その他", "name": "水栓ソケット（インサート付き）", "size": "25A", "mode": "piece", "price": 859, "packLen": 0, "qty": 0}, {"id": 113, "cat": "その他", "name": "異型ソケット", "size": "40Ａ×25Ａ", "mode": "piece", "price": 179, "packLen": 0, "qty": 0}, {"id": 114, "cat": "その他", "name": "フロアーバンド", "size": "40A", "mode": "piece", "price": 459, "packLen": 0, "qty": 0}, {"id": 115, "cat": "その他", "name": "座付き水栓エルボ", "size": "13×13Ａ", "mode": "piece", "price": 1998, "packLen": 0, "qty": 0}, {"id": 116, "cat": "その他", "name": "フレキシブルメタルホース500ｍｍ", "size": "40A", "mode": "piece", "price": 5998, "packLen": 0, "qty": 0}, {"id": 117, "cat": "その他", "name": "黒　絶縁ビニールテープ", "size": "１０巻き", "mode": "piece", "price": 1498, "packLen": 0, "qty": 0}, {"id": 118, "cat": "その他", "name": "ＰＰサドルＶＰ用", "size": "40Ａ", "mode": "piece", "price": 199, "packLen": 0, "qty": 0}, {"id": 119, "cat": "その他", "name": "厚手ゴミ袋", "size": "10枚", "mode": "piece", "price": 349, "packLen": 0, "qty": 0}, {"id": 120, "cat": "その他", "name": "土嚢袋", "size": "５０枚", "mode": "piece", "price": 3050, "packLen": 0, "qty": 0}, {"id": 121, "cat": "その他", "name": "スイングチャッキバルブ", "size": "25A", "mode": "piece", "price": 8598, "packLen": 0, "qty": 0}, {"id": 122, "cat": "その他", "name": "キャンパス絹　黒", "size": "", "mode": "piece", "price": 159, "packLen": 0, "qty": 0}, {"id": 123, "cat": "その他", "name": "保温材　白20Ａ", "size": "", "mode": "piece", "price": 349, "packLen": 0, "qty": 0}, {"id": 124, "cat": "その他", "name": "保温材　白25Ａ", "size": "", "mode": "piece", "price": 419, "packLen": 0, "qty": 0}, {"id": 125, "cat": "その他", "name": "シールテープ　黒", "size": "", "mode": "piece", "price": 199, "packLen": 0, "qty": 0}, {"id": 126, "cat": "別注文", "name": "GH-EXCR-19　エクセルカラー19mm", "size": "1メートル", "mode": "length", "price": 650, "packLen": 1, "qty": 0}, {"id": 127, "cat": "別注文", "name": "GH-EXCR-25　エクセルカラー25mm", "size": "1メートル", "mode": "length", "price": 970, "packLen": 1, "qty": 0}, {"id": 128, "cat": "別注文", "name": "32イーデアルホースバンド（鉄）20-32mm用", "size": "", "mode": "piece", "price": 190, "packLen": 0, "qty": 0}, {"id": 129, "cat": "別注文", "name": "40イーデアルホースバンド（鉄）25-40mm用", "size": "", "mode": "piece", "price": 190, "packLen": 0, "qty": 0}, {"id": 130, "cat": "別注文", "name": "カムロック　アダプター　633-Ｆ　20Ａテーパーネジ　19ｍｍ用", "size": "20Ａ", "mode": "piece", "price": 1150, "packLen": 0, "qty": 0}, {"id": 131, "cat": "別注文", "name": "カムロック　シャンク　　633-Ｃ　ホースニップル付き　19ｍｍ用", "size": "20Ａ", "mode": "piece", "price": 1940, "packLen": 0, "qty": 0}];
   const CAT_ORDER = ["HIVP", "鋼管", "バルブ", "ホースニップル", "フレキニップル", "固定足・バンド", "基本水栓・継手", "電気部材", "その他", "別注文"];
   let nextId = materials.length + 1;
+  var jobs = [];   // v1.5: 過去の集計(新しいものが前)
   const QTY_MAX = 99999;   // v1.2: 使用数は直接入力（上限は誤入力よけの大きな値）
   // 使用数の入力を数値に: 全角数字OK・マイナス/文字/空は0・個数は整数(四捨五入)・mは小数1桁まで
   function qtyParse(v, dec){
@@ -789,6 +804,7 @@
       imp: imports,
       lastImp: lastImp,
       history: stockLog,
+      jobs: jobs,
       materials: materials
     };
   }
@@ -839,13 +855,13 @@
       try{
         const s = JSON.parse(e.target.result);
         if(!s || !Array.isArray(s.materials) || !s.materials.length) throw new Error("部材データが見つかりません");
-        if(!confirm(`このバックアップを読み込むと、今の内容は置き換わります。\n（部材 ${s.materials.length} 件）\n\nよろしいですか？`)) return;
+        if(!confirm(`⚠ バックアップから元に戻します。\n今の部材・価格・使用数・在庫${Array.isArray(s.jobs) ? "・過去の集計" : ""}は、このファイルの内容で全部置き換わります（元には戻せません）。\n心配なら先に「💾 バックアップを保存」をしてね。\n\nファイル: 部材 ${s.materials.length} 件${Array.isArray(s.jobs) ? "・過去の集計 " + s.jobs.length + " 件" : "（過去の集計なし→今の記録はそのまま）"}\n\n置き換えてよろしいですか？`)) return;
         const res = applyState(s);   // 旧い(v:1)バックアップは不足項目を既定値で補って移行
         let note = "";
         if(res.r.updated > 0) note = "\n\n（旧いバックアップのため、" + priceMsg(res.r) + "）";
         saveState();
         render(); if(view === "stock") renderStock();
-        alert("読み込みました！" + note);
+        alert("バックアップから元に戻しました！" + note);
       }catch(err){ alert("読み込めませんでした：" + err.message); }
     };
     reader.readAsText(file);
@@ -1389,6 +1405,130 @@
     document.getElementById("ppTo").focus();
   });
 
+  // ===== v1.5: 過去の集計 =====
+  let pvRec = null;   // 印刷ビューで表示中の記録(null=今の集計)
+  let pvSavedId = null;
+  function snapTally(site, date){
+    const used = materials.filter(m => m.qty > 0);
+    const catsIn = [...new Set(used.map(m => m.cat))];
+    const cats = [...CAT_ORDER.filter(c => catsIn.includes(c)), ...catsIn.filter(c => !CAT_ORDER.includes(c))];
+    const items = [];
+    cats.forEach(cat => used.filter(m => m.cat === cat).forEach(m => items.push({
+      cat, id: m.id, name: m.name, size: m.size || "", unit: unitPriceTxt(m),
+      qty: m.mode === 'length' ? `${m.qty}m` : `${m.qty}${isPack(m) ? pkU(m) : ""}`, amt: amountOf(m) })));
+    const sub = items.reduce((a, x) => a + x.amt, 0);
+    const rate = Number(document.getElementById("taxRate").value) || 0;
+    const tax = Math.round(sub * rate / 100);
+    return { id: Date.now().toString(36), t: new Date().toISOString(), site: site, date: date, rate, sub, tax, grand: sub + tax,
+      title: printParties.title, to: printParties.to, items };
+  }
+  const jbToday = () => { const d = new Date(), p = n => String(n).padStart(2, "0"); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; };
+  const jDate = d => { const [y, m, dd] = String(d || "").split("-"); return y ? `${y}年${Number(m)}月${Number(dd)}日` : ""; };
+  function jobText(j){
+    const L = ["【HW部材集計】" + (j.site ? " " + j.site : ""), jDate(j.date), ""]; let c = "";
+    j.items.forEach(x => { if(x.cat !== c){ c = x.cat; L.push("■" + c); } L.push(`  ${x.name}${x.size ? "（" + x.size + "）" : ""}　${x.unit} × ${x.qty} = ${yen(x.amt)}`); });
+    L.push("", `小計　${yen(j.sub)}`, `消費税(${j.rate}%)　${yen(j.tax)}`, `総合計　${yen(j.grand)}`);
+    return L.join("\n");
+  }
+  function jobPvHtml(j){
+    let rows = "", c = "";
+    j.items.forEach(x => { if(x.cat !== c){ c = x.cat; rows += `<tr class="pv-catrow"><td colspan="4">${esc(c)}</td></tr>`; }
+      rows += `<tr><td class="pv-nm">${esc(x.name)}${x.size ? ` <span class="pv-sz">(${esc(x.size)})</span>` : ""}</td><td class="pv-r">${x.unit}</td><td class="pv-r">${esc(x.qty)}</td><td class="pv-r">${yen(x.amt)}</td></tr>`; });
+    return `<div class="pv-head"><div class="pv-title">${esc(j.title || printParties.title)}</div><div class="pv-date">発行日：${jDate(j.date)}</div></div>
+      <div class="pv-parties"><div class="pv-to">${esc(j.to || "")}${j.site ? `<div style="font-size:13px;margin-top:6px;">現場：${esc(j.site)}</div>` : ""}</div><div class="pv-from">${ppFromHtml()}</div></div>
+      <table class="pv-table"><thead><tr><th>品名・規格</th><th class="r">単価</th><th class="r">数量</th><th class="r">金額</th></tr></thead><tbody>${rows}</tbody></table>
+      <div class="pv-totals"><div class="pv-trow"><span>小計</span><span>${yen(j.sub)}</span></div><div class="pv-trow"><span>消費税(${j.rate}%)</span><span>${yen(j.tax)}</span></div><div class="pv-trow pv-grand"><span>総合計</span><span>${yen(j.grand)}</span></div></div>
+      <div class="pv-note">使用部材 ${j.items.length} 点</div>`;
+  }
+  function askSaveJob(after){
+    if(!materials.some(m => m.qty > 0)){ alert("まだ部材が選ばれてないよ"); return; }
+    openDlg({ title: "💾 過去の集計に保存", html: `<div class="field"><label>現場名</label><input type="text" id="jbSite" placeholder="例: 袖ケ浦 〇〇様邸" autocomplete="off" style="width:100%"></div>
+      <div class="field"><label>日付</label><input type="date" id="jbDate" value="${jbToday()}" style="width:100%"></div>
+      <div style="font-size:12px;color:var(--ink-soft);">今の単価・数量・金額をそのまま記録します（あとで価格を変えても記録は変わりません）。</div>`,
+      buttons: [{ t: "やめる", cls: "b-ghost" }, { t: "保存する", cls: "b-pri", fn: () => {} }] });
+    const btn = [...document.querySelectorAll("#dlgBtns button")].pop();
+    const site = () => document.getElementById("jbSite").value.trim().slice(0, 60);
+    const dt = () => document.getElementById("jbDate").value || jbToday();
+    btn.addEventListener("click", () => {
+      const j = snapTally(site() || "（現場名なし）", dt());
+      jobs.unshift(j); if(jobs.length > 300) jobs.length = 300;
+      saveState(); pvSavedId = j.id;
+      showUndo(`「${j.site}」を過去の集計に保存しました`, null, 4000);
+      if(after) after(j);
+    }, { capture: true });
+    setTimeout(() => { const el = document.getElementById("jbSite"); if(el) el.focus(); }, 50);
+  }
+  function openJobs(q){
+    const wrap = document.createElement("div");
+    wrap.innerHTML = `<div class="sh-hint">保存した現場ごとの集計です（新しい順）。集計表の画面の「💾 保存」で増えます。</div>
+      <div class="field"><input type="text" id="jbQ" placeholder="現場名・年月で検索（例: 袖ケ浦 / 2026-11 / 11月）" autocomplete="off" value="${esc(q || "")}"></div><div id="jbList"></div>`;
+    openSheet("📚 過去の集計", wrap);
+    const draw = () => {
+      const k = nfkc(document.getElementById("jbQ").value).toLowerCase().trim();
+      const list = jobs.filter(j => { if(!k) return true; const [y, m] = String(j.date).split("-");
+        const hay = nfkc(j.site).toLowerCase() + " " + j.date + " " + `${y}年${Number(m)}月 ${Number(m)}月 ${y}/${Number(m)} ${y}-${m}`;
+        return k.split(/\s+/).every(w => hay.includes(w)); });
+      document.getElementById("jbList").innerHTML = !jobs.length ? `<div class="card sh-hint">まだ記録はありません。<br>集計表を作成 →「💾 保存」で残せます。</div>`
+        : !list.length ? `<div class="card sh-hint">見つかりませんでした。</div>`
+        : list.map(j => `<button type="button" class="jb-row" data-id="${esc(j.id)}"><b>${esc(j.site)}</b><div class="jb-s"><span>${jDate(j.date)}・${j.items.length}点</span><span class="jb-g">${yen(j.grand)}</span></div></button>`).join("");
+      document.querySelectorAll("#jbList .jb-row").forEach(b => b.addEventListener("click", () => openJob(b.dataset.id)));
+    };
+    document.getElementById("jbQ").addEventListener("input", draw); draw();
+  }
+  function openJob(id){
+    const j = jobs.find(x => x.id === id); if(!j) return openJobs();
+    let rows = "", c = "";
+    j.items.forEach(x => { if(x.cat !== c){ c = x.cat; rows += `<tr class="c"><td colspan="3">${esc(c)}</td></tr>`; }
+      rows += `<tr><td>${esc(x.name)}${x.size ? `<br><small>${esc(x.size)}</small>` : ""}</td><td class="r">${x.unit}<br>× ${esc(x.qty)}</td><td class="r">${yen(x.amt)}</td></tr>`; });
+    const wrap = document.createElement("div");
+    wrap.innerHTML = `<div class="card"><div style="font-size:16px;font-weight:800;">${esc(j.site)}</div><div class="sh-hint" style="margin:2px 0 8px;">${jDate(j.date)}（保存 ${fmtDT(j.t)}）・読むだけ</div>
+      <table class="jb-tbl">${rows}</table>
+      <div class="jb-tot"><div><span>小計</span><span>${yen(j.sub)}</span></div><div><span>消費税(${j.rate}%)</span><span>${yen(j.tax)}</span></div><div class="g"><span>総合計</span><span>${yen(j.grand)}</span></div></div></div>
+      <div class="btn-pair"><button class="btn-wide pri" id="jbPrint" type="button">🖨 印刷 / PDF</button><button class="btn-wide sub" id="jbCopy" type="button">テキストでコピー</button></div>
+      <div class="btn-pair"><button class="btn-wide sub" id="jbBack" type="button">← 一覧へ</button><button class="btn-wide sub" id="jbDel" type="button" style="color:#b42318;">🗑 この記録を削除</button></div>`;
+    openSheet("過去の集計: " + j.site, wrap);
+    document.getElementById("jbBack").addEventListener("click", () => openJobs());
+    document.getElementById("jbCopy").addEventListener("click", e => { const t = jobText(j), b = e.target;
+      const done = () => { b.textContent = "コピーしたよ"; setTimeout(() => b.textContent = "テキストでコピー", 1600); };
+      if(navigator.clipboard) navigator.clipboard.writeText(t).then(done).catch(() => fallbackCopy(t, done)); else fallbackCopy(t, done); });
+    document.getElementById("jbPrint").addEventListener("click", () => {
+      pvRec = j; document.getElementById("pvPage").innerHTML = jobPvHtml(j);
+      const pv = document.getElementById("printView"); pv.classList.add("pv-rec"); pv.classList.add("open"); pv.scrollTop = 0;
+    });
+    document.getElementById("jbDel").addEventListener("click", () => openDlg({ title: "記録を削除", html: `<span class="nm">「${esc(j.site)}」</span>（${jDate(j.date)}・${yen(j.grand)}）の記録を削除します。元に戻せません。`,
+      buttons: [{ t: "やめる", cls: "b-ghost" }, { t: "削除する", cls: "b-pri", fn: () => { jobs = jobs.filter(x => x.id !== j.id); saveState(); openJobs(); } }] }));
+  }
+  document.getElementById("jobsBtn").addEventListener("click", () => openJobs());
+  // v1.5: 葵ちゃんと在庫を数えるときのヘルプ
+  const AOI_MSG = "葵ちゃん、HW部材集計の在庫集計をやろう。手順は akiyamanx/hw-parts-calculator の docs/AOI_INVENTORY_GUIDE.md を見てね";
+  document.querySelectorAll(".aoi-help").forEach(b => b.addEventListener("click", () => {
+    openDlg({ title: "🦋 葵ちゃんと在庫を数えるとき", html: `<ol style="margin:0 0 10px;padding-left:20px;line-height:1.7">
+      <li>下のメッセージをコピーして葵ちゃんに送る</li>
+      <li>在庫の写真・メモ・声で数を伝える</li>
+      <li>葵ちゃんが作ったファイル(.json)を保存</li>
+      <li>「📥 在庫データを取り込む」で選ぶ → プレビューを見て取り込む（8秒なら取り消しOK）</li></ol>
+      <div id="aoiMsg" style="background:#f1f5f6;border-radius:10px;padding:10px;font-size:13px;user-select:all">${esc(AOI_MSG)}</div>
+      <button type="button" id="aoiCopy" class="b-pri" style="margin-top:10px;width:100%;padding:12px;border:0;border-radius:10px;font-weight:800">📋 メッセージをコピー</button>`,
+      buttons: [{ t: "閉じる", cls: "b-ghost" }] });
+    document.getElementById("aoiCopy").addEventListener("click", e => { const t = AOI_MSG, bt = e.target;
+      const done = () => { bt.textContent = "✓ コピーしたよ"; setTimeout(() => bt.textContent = "📋 メッセージをコピー", 1600); };
+      if(navigator.clipboard) navigator.clipboard.writeText(t).then(done).catch(() => fallbackCopy(t, done)); else fallbackCopy(t, done); });
+  }));
+  document.getElementById("pvSave").addEventListener("click", () => askSaveJob(() => { document.getElementById("pvSave").textContent = "✓ 保存済み"; }));
+  // 今の集計を印刷/PDFしたあと、まだ保存していなければ保存をすすめる
+  document.getElementById("pvPrint").addEventListener("click", () => {
+    if(pvRec || pvSavedId) return;
+    setTimeout(() => { if(document.getElementById("printView").classList.contains("open") && !pvSavedId)
+      openDlg({ title: "過去の集計に残す？", html: "この集計をアプリの中にも保存しておくと、あとで「📚 過去の集計」からすぐ見られます。",
+        buttons: [{ t: "今はしない", cls: "b-ghost" }, { t: "💾 保存する", cls: "b-pri", fn: () => setTimeout(() => askSaveJob(() => { document.getElementById("pvSave").textContent = "✓ 保存済み"; }), 0) }] }); }, 600);
+  });
+  // 今の集計を開く時は「保存」ボタンを出し、記録を開いている時は隠す
+  new MutationObserver(() => { const pv = document.getElementById("printView");
+    if(!pv.classList.contains("open")){ if(pv.classList.contains("pv-rec")) pv.classList.remove("pv-rec"); pvRec = null; pvSavedId = null; document.getElementById("pvSave").textContent = "💾 保存"; }
+    document.getElementById("pvSave").style.display = pv.classList.contains("pv-rec") ? "none" : "";
+    document.getElementById("pvEdit").style.display = pv.classList.contains("pv-rec") ? "none" : "";
+  }).observe(document.getElementById("printView"), { attributes: true, attributeFilter: ["class"] });
+
   // ===== データ管理ボタンのイベント（v0.5追加） =====
   document.getElementById("resetQtyBtn").addEventListener("click", resetQuantities);
   document.getElementById("exportBtn").addEventListener("click", exportBackup);
@@ -1467,6 +1607,7 @@
     stockLog = Array.isArray(s.history) ? s.history.filter(e => e && e.t).slice(-100) : [];
     invRound = typeof s.round === "string" ? s.round : null;
     lastUse = (s.lastUse && Array.isArray(s.lastUse.items)) ? s.lastUse : null;
+    if(Array.isArray(s.jobs)) jobs = s.jobs.filter(j => j && typeof j === 'object' && Array.isArray(j.items)).slice(0, 300);   // v1.5: 無い(古い)データ・バックアップなら今の記録はそのまま
     dupIgnore = Array.isArray(s.dupIgnore) ? s.dupIgnore.filter(x => typeof x === "string") : [];
     let r = { updated: 0, kept: 0 }, changed = false;
     if(s.priceRev !== PRICE_REV){ r = migratePrices(materials); changed = true; }   // v0.7: 価格の一括移行
@@ -2150,7 +2291,7 @@
     try{ o = JSON.parse(String(text).replace(/^\uFEFF/, "")); }
     catch(e){ return { err: "ファイルの中身を読み取れませんでした（JSONの形式が正しくありません）。葵ちゃんに作り直してもらってね。" }; }
     if(!o || typeof o !== "object" || Array.isArray(o)) return { err: "入出庫ファイルではありません（中身が { … } の形になっていません）。" };
-    if(Array.isArray(o.materials)) return { err: "これはバックアップのファイルです。入出庫ファイルではありません。バックアップは「⬆️ 読み込む」から入れてね。" };
+    if(Array.isArray(o.materials)) return { err: "これはバックアップのファイルです。入出庫ファイルではありません。バックアップは「♻️ バックアップから元に戻す」から入れてね。" };
     if(o.type !== "hw-parts-ops") return { err: "入出庫ファイルではありません（type が \"hw-parts-ops\" になっていません）。" };
     const ver = Number(o.version);
     if(ver > 1) return { err: "このファイルは新しい形式（version " + esc(String(o.version)) + "）です。アプリを新しい版に更新してから取り込んでね。" };
@@ -3118,15 +3259,17 @@
     document.body.style.overflow='';
   }
   function goHome(){ closeAll(); if(!$('segCollect').classList.contains('on')) $('segCollect').click(); }
+  var backing=false;
   var sync=function(){
     var o=isOpen(); document.body.classList.toggle('sub-open',o);
     var st=history.state&&history.state.hwSub;
+    if(backing) return;
     if(o && !st) history.pushState({hwSub:1},'');
-    else if(!o && st) history.back();   // 画面内の閉じる操作で閉じた時は履歴も戻す
+    else if(!o && st){ backing=true; history.back(); }   // 画面内の閉じる操作で閉じた時は履歴も戻す
   };
   var mo=new MutationObserver(sync);
   ['sheet','cv','printView','dlg','ptOv'].forEach(function(id){mo.observe($(id),{attributes:true,attributeFilter:['class']});});
-  window.addEventListener('popstate',function(){ if(isOpen()) goHome(); document.body.classList.toggle('sub-open',isOpen()); });
+  window.addEventListener('popstate',function(){ var w=backing; backing=false; if(!w && isOpen()) goHome(); document.body.classList.toggle('sub-open',isOpen()); });
   // 「← ホーム」は在庫タブから開いた画面でも部材表へ
   ['sheetClose','pvClose','ptClose'].forEach(function(id){$(id).addEventListener('click',function(){ setTimeout(goHome,0); });});
   document.addEventListener('click',function(e){ if(e.target&&e.target.id==='cvClose') setTimeout(goHome,0); });
