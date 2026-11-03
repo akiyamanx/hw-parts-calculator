@@ -23,6 +23,7 @@
   ※v1.3: 部材ごとに価格の更新年月 pu:"YYYY-MM" を記録(単価/購入金額/入数/購入長を変えた時・新規追加・取り込みの新規・基準価格の一括更新)。古いデータは pu なし=「更新日なし」(日付は作らない)。表示: 集計の行(更新済みのみ小さく)・編集画面・重複をまとめる画面。まとめる時は残す方の価格と更新年月のまま
   ※v1.4: 全サブ画面(シート・棚卸し・集計表・工事価格表)に「← ホーム」。スマホの戻るボタン/ジェスチャーでもホーム(集計の部材表)へ(history.pushState)。サブ画面中は右上の工事価格表ボタンを隠し、ボタンは固定表示をやめてヘッダーと一緒にスクロール(重なり解消)
   ※v1.8: 過去の集計を同じ現場名で保存すると「上書きして更新／別の集計として保存／やめる」を選べる(上書きは一番新しい同名の記録を中身ごと入れ替えて先頭へ)。一覧の各行に🗑削除ボタン。集計表のタイトルは長いと文字を小さくして1行に(最小12px・それでも入らなければ折り返し。印刷/PDF・過去の記録も同じ)。
+  ※v1.9: 部材ごとの「在庫を数えるときの単位」(m.cnu・編集画面で選ぶ/自由入力。未設定は名前から自動: 長さ部材=m、ゴム板・袋類=枚、1袋=袋、1箱=箱、巻・テープ=巻、セット、保温材=本、他=個。値段計算は不変・バックアップに含む)。「📝 手書きの在庫表を印刷」= 今の部材リストから毎回作る手書き用の在庫確認表(A4縦・白黒・値段なし)。番号(=部材id)・品名・規格・数量の記入欄・単位。種類ごと(配管材はサイズ別)。種類のON/OFFあり。葵ちゃんは写真から番号で count を作る(docs/AOI_INVENTORY_GUIDE.md)。
   ※v1.7.1: サイズ分けは配管材だけ(m.pipe=1/0で個別に変更可・編集画面にチェック)。配管でない物(固定足・バンド・電気部材・消耗品)は並べるだけ。「その他」の一部を正しい種類へ移動(初期データ＋保存済み端末は1回だけ自動移行・元に戻すボタンあり)。
   ※v1.7: 部材表の各カテゴリをサイズ別の小グループで表示(13/15/20/25…の数字順・2つのサイズは「異型」・サイズ不明は「その他サイズ」・サイズが1種類だけのカテゴリはそのまま)。規格欄から読み取り(20A・(20A)・15ミリ・3/4B・6分など)。開閉はこの端末に記憶。検索・使った部材だけ表示の時は自動で開く。データ・集計・集計表・履歴は変更なし。
   ※v1.6: 過去の集計の詳細を集計表(印刷ビュー)と同じ見た目で表示(使った部材だけ)。「📖 見ながら集計」= 記録を見ながら今の集計を入力できる参照パネル。横に並べる(幅900px以上は左右、狭い画面は上下・境目をドラッグで高さ変更)／ポップアップ(ドラッグで移動・最小化・閉じる)。読むだけ・戻るボタン/← ホームで閉じる。
@@ -82,6 +83,7 @@
   .mig-banner{background:#eef8f6;border:1px solid var(--accent);border-radius:12px;padding:10px 12px;margin-bottom:9px;font-size:13px;color:var(--ink);line-height:1.5;}
   .mig-btns{display:flex;gap:8px;margin-top:8px;}
   .mig-btns button{flex:1;border:1px solid var(--accent);background:#fff;color:var(--accent-deep);border-radius:8px;padding:8px;font-weight:700;font-family:inherit;}
+  .ep-cu{margin:8px 0 4px;} .ep-cu label{display:block;font-size:12px;font-weight:700;color:var(--ink-soft);margin-bottom:3px;} .ep-cu-row{display:flex;gap:6px;} .ep-cu-row select,.ep-cu-row input{font-size:16px;padding:8px;border:1.5px solid var(--line);border-radius:9px;font-family:inherit;} .ep-cu-row input{width:6em;} .ep-cu-d,.ep-cu-len{font-size:11.5px;color:var(--ink-soft);margin:3px 0;}
   .ep-pipe{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink);margin:6px 2px;}
   .szg{border:1px solid var(--line);border-radius:10px;margin:6px 0;background:#fbfcfc;}
   .szg.used{border-color:var(--accent);background:#f3fbfb;}
@@ -274,6 +276,36 @@
     body.ref-split .wrap{padding-top:0;margin-left:12px;margin-right:calc(var(--refW,46vw) + 12px);}
     body.ref-split .totalbar{right:var(--refW,46vw);}
   }
+  /* v1.9 手書き在庫表 */
+  .count-view{display:none;position:fixed;inset:0;z-index:101;background:#e7e9ea;overflow:auto;-webkit-overflow-scrolling:touch;}
+  .count-view.open{display:block;}
+  .cs-bar{position:sticky;top:0;z-index:2;display:flex;gap:8px;flex-wrap:wrap;padding:10px 12px;background:#fff;box-shadow:0 1px 6px rgba(0,0,0,.12);}
+  .cs-bar button{font-family:inherit;font-size:15px;font-weight:800;border-radius:11px;padding:10px 14px;border:1.5px solid var(--line);background:#f1f3f4;color:var(--ink);cursor:pointer;}
+  .cs-bar .cs-print{background:var(--accent);color:#fff;border-color:var(--accent);flex:1;}
+  .cs-cats{display:flex;flex-wrap:wrap;gap:6px 12px;padding:8px 12px;background:#fff;border-top:1px solid var(--line);font-size:13px;}
+  .cs-cats label{display:flex;align-items:center;gap:4px;}
+  .cs-page{background:#fff;color:#000;max-width:800px;margin:12px auto;padding:22px 18px;box-shadow:0 2px 10px rgba(0,0,0,.12);font-size:13px;}
+  .cs-h{display:flex;flex-wrap:wrap;align-items:flex-end;gap:6px 18px;border-bottom:2px solid #000;padding-bottom:6px;margin-bottom:6px;}
+  .cs-h h2{font-size:20px;margin:0;flex:1 1 100%;letter-spacing:.05em;}
+  .cs-f{font-size:14px;font-weight:700;} .cs-f span{display:inline-block;min-width:130px;border-bottom:1px solid #000;}
+  .cs-note{font-size:11px;margin:4px 0 8px;}
+  .cs-tbl{width:100%;border-collapse:collapse;}
+  .cs-tbl th,.cs-tbl td{border:1px solid #000;padding:0 6px;height:34px;vertical-align:middle;}
+  .cs-tbl th{height:24px;font-size:12px;background:#fff;}
+  .cs-tbl thead{display:table-header-group;}
+  .cs-tbl tr{break-inside:avoid;page-break-inside:avoid;}
+  .cs-tbl td.cd{width:42px;text-align:center;font-family:ui-monospace,Menlo,monospace;font-weight:800;font-size:13px;}
+  .cs-tbl td.nm{font-size:13.5px;line-height:1.25;}
+  .cs-tbl td.nm small{font-size:11.5px;}
+  .cs-tbl td.q{width:30%;} .cs-tbl td.u{width:42px;white-space:nowrap;text-align:center;font-size:13px;}
+  .cs-tbl tr.c td{height:26px;font-weight:800;font-size:14px;border-top:2px solid #000;break-after:avoid;page-break-after:avoid;}
+  .cs-tbl tr.g td{height:22px;font-weight:700;font-size:12px;padding-left:16px;break-after:avoid;page-break-after:avoid;}
+  @media print{
+    html.cs-printing body > *:not(.count-view){display:none !important;}
+    html.cs-printing .count-view{position:static !important;display:block !important;background:#fff !important;overflow:visible !important;}
+    html.cs-printing .cs-bar,html.cs-printing .cs-cats{display:none !important;}
+    html.cs-printing .cs-page{margin:0 !important;box-shadow:none !important;max-width:none !important;padding:0 !important;}
+  }
   @media print{#refPane{display:none !important;}}
   @media print{
     body{background:#fff !important;}
@@ -281,7 +313,7 @@
     .print-view{position:static !important;display:block !important;background:#fff !important;overflow:visible !important;}
     .pv-toolbar{display:none !important;}
     .pv-page{margin:0 !important;box-shadow:none !important;max-width:none !important;padding:0 !important;}
-    @page{margin:14mm;}
+    @page{size:A4 portrait;margin:12mm;}
   }
   /* データ管理ツール（数量リセット・バックアップ） v0.5追加 */
   .data-tools{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 4px;}
@@ -572,7 +604,7 @@
         <path d="M12 2.5C12 2.5 5 10 5 14.5C5 18.5 8.13 21.5 12 21.5C15.87 21.5 19 18.5 19 14.5C19 10 12 2.5 12 2.5Z" fill="#0a9396"/>
         <path d="M9 14.5C9 16.16 10.34 17.5 12 17.5" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>
       </svg>
-      HW部材集計 <span style="font-size:10.5px;font-weight:700;color:var(--ink-soft);opacity:.7;margin-left:2px;">v1.8</span>
+      HW部材集計 <span style="font-size:10.5px;font-weight:700;color:var(--ink-soft);opacity:.7;margin-left:2px;">v1.9</span>
     </div>
     <div class="subtitle">HYPER Water 設置で使った部材を集計</div>
     <div class="price-date" id="priceDate"></div>
@@ -649,6 +681,7 @@
     <button class="data-btn" id="deleteModeBtn" type="button">🗑️ 項目を削除</button>
     <button class="data-btn" id="mergeBtn" type="button">🔗 重複をまとめる</button>
     <button class="data-btn" id="resetQtyBtn" type="button">🧹 数量を全部リセット</button>
+    <button class="data-btn dx" id="countSheetBtn" type="button">📝 手書きの在庫表を印刷<span class="dx-sub">今の部材リストで、数を手で書き込む紙を作ります（コピー機用・値段はのりません）</span></button>
     <button class="data-btn dx" id="jobsBtn" type="button">📚 過去の集計<span class="dx-sub">保存した現場ごとの集計を見る・印刷・コピー</span></button>
     <button class="data-btn dx" id="exportBtn" type="button">💾 バックアップを保存<span class="dx-sub">部材・価格・数量・在庫・過去の集計を1つのファイルにして保存（機種変更・もしもの時用）</span></button>
     <button class="data-btn dx" id="importBtn" type="button">♻️ バックアップから元に戻す<span class="dx-sub">保存したバックアップファイルで、今のデータを全部置き換えます</span></button>
@@ -734,6 +767,7 @@
 <div class="utoast" id="undoToast"><span id="utMsg"></span><button type="button" id="utBtn">元に戻す</button></div>
 
 <!-- 印刷用 集計表ビュー(マーフィード送付用) -->
+<div class="count-view" id="countView"><div class="cs-bar"><button type="button" id="csClose">← ホーム</button><button type="button" class="cs-print" id="csPrint">🖨 印刷 / PDF</button></div><div class="cs-cats" id="csCats"></div><div class="cs-page" id="csPage"></div></div>
 <div class="print-view" id="printView">
   <div class="pv-toolbar">
     <button class="pv-close" id="pvClose">← ホーム</button>
@@ -979,6 +1013,21 @@
   const PACK_UNITS = ["個","本","枚","巻","組","袋","セット"];
   const isPack = m => m.mode !== 'length' && Number(m.packQty) > 1;
   const pkU = m => m.packUnit || "個";
+  // v1.9: 在庫を数えるときの単位（手書きの在庫表用。値段の計算には使わない）。m.cnu=手で選んだ単位(優先)
+  const CNT_UNITS = ["個", "本", "m", "巻", "枚", "箱", "袋", "組", "セット"];
+  function cntGuess(m){
+    if(m.mode === 'length') return "m";
+    const t = nfkc((m.name || "") + " " + (m.size || ""));
+    if(/ゴミ袋|土嚢袋|ゴム板|[0-9]枚[)）]?$|[(（]1枚[)）]/.test(t)) return "枚";
+    if(/袋ナット/.test(t) && !/1袋/.test(t)) return /セット/.test(t) ? "セット" : "個";
+    if(/1袋|[(（]1袋/.test(t)) return "袋";
+    if(/1箱|[(（]1箱/.test(t)) return "箱";
+    if(/巻|テープ/.test(t)) return "巻";
+    if(/セット/.test(t)) return "セット";
+    if(/保温材|パイプ|直管/.test(t)) return "本";
+    return "個";
+  }
+  const cntU = m => m.mode === 'length' ? "m" : (m.cnu || cntGuess(m));
   const unitOf  = m => (m.mode==='length' && m.packLen>0) ? m.price/m.packLen : (isPack(m) ? m.price/m.packQty : m.price);
   // 丸め: 各行の金額 = 単価×使用数 を1円未満四捨五入。小計はその合計
   const amountOf = m => Math.round(unitOf(m) * (Number(m.qty) || 0));
@@ -1213,6 +1262,11 @@
             <select class="ep-pu">${PACK_UNITS.map(u => `<option${u===pkU(m)?" selected":""}>${u}</option>`).join("")}</select>
           </div>
         </div>
+        <div class="ep-cu ep-pk-f" style="${isLen?"display:none;":""}"><label>在庫を数えるときの単位（手書きの在庫表にのります）</label>
+          <div class="ep-cu-row"><select class="ep-cus">${CNT_UNITS.map(u => `<option${u===cntU(m)?" selected":""}>${u}</option>`).join("")}<option value="__free"${CNT_UNITS.includes(cntU(m))?"":" selected"}>その他（自分で書く）</option></select>
+          <input type="text" class="ep-cuf" maxlength="4" placeholder="例：缶" value="${CNT_UNITS.includes(cntU(m)) ? "" : esc(cntU(m))}" style="${CNT_UNITS.includes(cntU(m))?"display:none;":""}"></div>
+          <div class="ep-cu-d">値段の計算は変わりません。${m.cnu ? "" : "（いまは名前から自動で選んでいます）"}</div></div>
+        <div class="ep-cu-len" style="${isLen?"":"display:none;"}">在庫を数えるときの単位：m（長さで入れる部材は m で数えます）</div>
         <label class="ep-pipe"><input type="checkbox" class="ep-pp" ${isPipe(m) ? "checked" : ""}> 配管材としてサイズ別に分ける</label>
         <div class="ep-pu-d">💴 価格: ${puTxt(m)}</div>
         <div class="ep-hint" id="ephint-${m.id}"></div>
@@ -1302,6 +1356,11 @@
       lenInp.addEventListener("input", updateHint);
       pqInp.addEventListener("input", updateHint);
       puSel.addEventListener("change", updateHint);
+      const cuSel = panel.querySelector(".ep-cus"), cuFree = panel.querySelector(".ep-cuf");
+      cuSel.addEventListener("change", () => { cuFree.style.display = cuSel.value === "__free" ? "" : "none"; if(cuSel.value === "__free") cuFree.focus(); });
+      panel.querySelectorAll(`input[name="epmode-${id}"]`).forEach(r => r.addEventListener("change", () => {
+        const isLen = panel.querySelector(`input[name="epmode-${id}"]:checked`).value === 'length';
+        panel.querySelector(".ep-cu-len").style.display = isLen ? "" : "none"; }));
       panel.querySelector(".ep-cancel").addEventListener("click", () => { editingId = null; render(); });
       panel.querySelector(".ep-save").addEventListener("click", () => {
         const m = materials.find(x => x.id === id);
@@ -1318,6 +1377,8 @@
         if(mode !== 'length' && pqOf()){ m.packQty = pqOf(); m.packUnit = puSel.value; }
         else { delete m.packQty; delete m.packUnit; }
         m.mode = mode;
+        { const v = cuSel.value === "__free" ? nfkc(cuFree.value).trim().slice(0, 4) : cuSel.value;   // v1.9: 数え方の単位（手で選んだら保存＝優先）
+          if(!v || v === cntGuess(m)) delete m.cnu; else m.cnu = v; }
         applyMeta(m, epMeta.get());
         if(mode==='length'){
           const L = Math.max(0, parseFloat(lenInp.value) || 0);
@@ -1646,6 +1707,47 @@
     document.getElementById("jbDel").addEventListener("click", () => delJob(j, () => openJobs()));
   }
   document.getElementById("jobsBtn").addEventListener("click", () => openJobs());
+  // v1.9 手書き在庫表（部材リストから毎回作る＝部材が増えても自動で反映。値段はのせない）
+  const csOff = new Set();
+  const csUnit = m => esc(cntU(m));
+  function csCatsList(){
+    const ci = [...new Set(materials.map(m => m.cat))];
+    return [...CAT_ORDER.filter(c => ci.includes(c)), ...ci.filter(c => !CAT_ORDER.includes(c))];
+  }
+  function csRow(m){
+    return `<tr><td class="cd">${esc(m.id)}</td><td class="nm">${esc(m.name)}${m.size && !nfkc(m.name).includes(nfkc(m.size)) ? ` <small>(${esc(m.size)})</small>` : ""}</td><td class="q"></td><td class="u">${csUnit(m)}</td></tr>`;
+  }
+  function countSheetHtml(){
+    let rows = "", n = 0;
+    csCatsList().filter(c => !csOff.has(c)).forEach(cat => {
+      const all = materials.filter(m => m.cat === cat);
+      if(!all.length) return;
+      n += all.length;
+      rows += `<tr class="c"><td colspan="4">■ ${esc(cat)}（${all.length}点）</td></tr>`;
+      const kinds = new Set(all.filter(isPipe).map(sizeGroup));
+      if(kinds.size < 2){ all.forEach(m => rows += csRow(m)); return; }
+      const gs = [...new Set(all.filter(isPipe).map(sizeGroup))].sort((a, b) => {
+        const r = x => x === null ? 1e9 + 1 : x === "異型" ? 1e9 : x; return r(a) - r(b); });
+      gs.forEach(g => {
+        rows += `<tr class="g"><td colspan="4">${esc(cat)} ／ ${esc(szLabel(g))}</td></tr>`;
+        all.filter(m => isPipe(m) && sizeGroup(m) === g).forEach(m => rows += csRow(m));
+      });
+      const flat = all.filter(m => !isPipe(m));
+      if(flat.length){ rows += `<tr class="g"><td colspan="4">${esc(cat)} ／ サイズ分けしない部材</td></tr>`; flat.forEach(m => rows += csRow(m)); }
+    });
+    return `<div class="cs-h"><h2>HW工事　部材 在庫確認表（手書き用）</h2><div class="cs-f">記入日 <span></span></div><div class="cs-f">記入者 <span></span></div></div>
+      <div class="cs-note">「数量」に数えた数を書いてください（なければ 0）。番号はアプリの部材番号です。全${n}点</div>
+      <table class="cs-tbl"><thead><tr><th>番号</th><th>品名・規格</th><th>数量</th><th style="white-space:nowrap">単位</th></tr></thead><tbody>${rows}</tbody></table>`;
+  }
+  function drawCountSheet(){
+    $("csCats").innerHTML = "のせる種類：" + csCatsList().map(c => `<label><input type="checkbox" data-c="${esc(c)}"${csOff.has(c) ? "" : " checked"}>${esc(c)}</label>`).join("");
+    $("csPage").innerHTML = countSheetHtml();
+  }
+  document.getElementById("csCats").addEventListener("change", e => { const c = e.target.dataset.c; if(c == null) return; e.target.checked ? csOff.delete(c) : csOff.add(c); $("csPage").innerHTML = countSheetHtml(); });
+  document.getElementById("countSheetBtn").addEventListener("click", () => { drawCountSheet(); $("countView").classList.add("open"); $("countView").scrollTop = 0; lockScroll(); });
+  document.getElementById("csClose").addEventListener("click", () => { $("countView").classList.remove("open"); lockScroll(); });
+  document.getElementById("csPrint").addEventListener("click", () => { document.documentElement.classList.add("cs-printing"); window.print(); });
+  window.addEventListener("afterprint", () => document.documentElement.classList.remove("cs-printing"));
   // v1.6: 見ながら集計（参照パネル。読むだけ）
   const refPane = document.createElement("div"); refPane.id = "refPane";
   refPane.innerHTML = `<div class="ref-col"><div class="ref-hd"><span class="t" id="refTitle"></span><button type="button" id="refMode">⇄</button><button type="button" id="refMin">—</button><button type="button" id="refClose">✕ 閉じる</button></div><div class="ref-body"><div class="pv-page" id="refPage"></div></div></div><div class="ref-grip" id="refGrip"></div>`;
@@ -1776,6 +1878,7 @@
     if(Array.isArray(m.al)){ m.al = normAliases(m.al); if(!m.al.length) delete m.al; } else delete m.al;   // v0.9
     if(typeof m.shop === "string" && m.shop.trim()) m.shop = m.shop.trim().slice(0, 30); else delete m.shop;
     if(m.cu) m.cu = 1; else delete m.cu;
+    if(typeof m.cnu === "string" && m.cnu.trim()) m.cnu = m.cnu.trim().slice(0, 4); else delete m.cnu;   // v1.9
     if(m.pipe != null) m.pipe = m.pipe ? 1 : 0;   // v1.7.1
     if(!(typeof m.pu === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(m.pu))) delete m.pu;   // v1.3
     // v1.2: 入数(無い/1以下/変な値 → 項目ごと消す＝従来どおり1個単位)
@@ -1840,7 +1943,7 @@
 
   // ---- ダイアログ・シート・トースト ----
   function lockScroll(){
-    const on = ["sheet", "cv", "printView", "dlg"].some(id => $(id).classList.contains("open"));
+    const on = ["sheet", "cv", "printView", "countView", "dlg"].some(id => $(id).classList.contains("open"));
     document.body.style.overflow = on ? "hidden" : "";
   }
   function openDlg(o){
