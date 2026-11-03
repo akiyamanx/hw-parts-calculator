@@ -22,6 +22,7 @@
   ※v1.2: 箱・袋売り部材の「入数」(packQty/packUnit)。単価=購入金額÷入数(表示は小数2桁まで)、各行の金額=単価×使用数を1円未満四捨五入、合計は四捨五入後の行金額の合計。編集画面で商品名・規格・入数を変更可(参照はidなので名前変更で集計は崩れない)。入数なし=従来どおり(保存形式v:3のまま・項目追加のみ)。使用数は0〜50のプルダウンをやめて直接入力(数字キーボード・全角OK・負/不正は0・個数は整数)
   ※v1.3: 部材ごとに価格の更新年月 pu:"YYYY-MM" を記録(単価/購入金額/入数/購入長を変えた時・新規追加・取り込みの新規・基準価格の一括更新)。古いデータは pu なし=「更新日なし」(日付は作らない)。表示: 集計の行(更新済みのみ小さく)・編集画面・重複をまとめる画面。まとめる時は残す方の価格と更新年月のまま
   ※v1.4: 全サブ画面(シート・棚卸し・集計表・工事価格表)に「← ホーム」。スマホの戻るボタン/ジェスチャーでもホーム(集計の部材表)へ(history.pushState)。サブ画面中は右上の工事価格表ボタンを隠し、ボタンは固定表示をやめてヘッダーと一緒にスクロール(重なり解消)
+  ※v1.7: 部材表の各カテゴリをサイズ別の小グループで表示(13/15/20/25…の数字順・2つのサイズは「異型」・サイズ不明は「その他サイズ」・サイズが1種類だけのカテゴリはそのまま)。規格欄から読み取り(20A・(20A)・15ミリ・3/4B・6分など)。開閉はこの端末に記憶。検索・使った部材だけ表示の時は自動で開く。データ・集計・集計表・履歴は変更なし。
   ※v1.6: 過去の集計の詳細を集計表(印刷ビュー)と同じ見た目で表示(使った部材だけ)。「📖 見ながら集計」= 記録を見ながら今の集計を入力できる参照パネル。横に並べる(幅900px以上は左右、狭い画面は上下・境目をドラッグで高さ変更)／ポップアップ(ドラッグで移動・最小化・閉じる)。読むだけ・戻るボタン/← ホームで閉じる。
   ※v1.5: 「過去の集計」= 集計表(印刷ビュー)の「💾 保存」で現場名・日付・明細(その時点の単価/数量/金額)・合計をスナップショット保存(state.jobs・最大300件・バックアップに含む)。一覧(新しい順・現場名/年月で検索)→詳細(読むだけ)→印刷/PDF・テキストコピー・削除。ボタン名: バックアップを保存／バックアップから元に戻す／在庫データを取り込む(説明1行つき)。「🦋 葵ちゃんと在庫を数えるとき」= 手順と葵ちゃんへのメッセージのコピー(docs/AOI_INVENTORY_GUIDE.md)
 -->
@@ -75,6 +76,17 @@
   .cat-body{display:none;padding:0 10px 8px;}
   .cat.open .cat-body{display:block;}
 
+  .szg{border:1px solid var(--line);border-radius:10px;margin:6px 0;background:#fbfcfc;}
+  .szg.used{border-color:var(--accent);background:#f3fbfb;}
+  .sz-head{width:100%;display:flex;align-items:center;gap:8px;padding:10px 11px;background:none;border:none;cursor:pointer;text-align:left;font-family:inherit;}
+  .sz-name{font-size:14px;font-weight:800;color:var(--accent-deep);}
+  .sz-badge{background:var(--accent);color:#fff;font-size:10.5px;font-weight:700;border-radius:20px;padding:2px 8px;}
+  .sz-sub{margin-left:auto;display:flex;align-items:center;gap:9px;}
+  .sz-sum{font-size:12.5px;font-weight:700;color:var(--accent-deep);font-variant-numeric:tabular-nums;}
+  .sz-body{display:none;padding:0 6px 6px;}
+  .szg.open .sz-body{display:block;}
+  .cat.open .szg:not(.open) .chevron{transform:none;}
+  .szg.open .chevron{transform:rotate(180deg);}
   .item{padding:11px 11px;border-top:1px solid var(--line);}
   .item:first-child{border-top:none;}
   .item.has-qty{background:#f3fbfb;border-radius:9px;}
@@ -546,7 +558,7 @@
         <path d="M12 2.5C12 2.5 5 10 5 14.5C5 18.5 8.13 21.5 12 21.5C15.87 21.5 19 18.5 19 14.5C19 10 12 2.5 12 2.5Z" fill="#0a9396"/>
         <path d="M9 14.5C9 16.16 10.34 17.5 12 17.5" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>
       </svg>
-      HW部材集計 <span style="font-size:10.5px;font-weight:700;color:var(--ink-soft);opacity:.7;margin-left:2px;">v1.6</span>
+      HW部材集計 <span style="font-size:10.5px;font-weight:700;color:var(--ink-soft);opacity:.7;margin-left:2px;">v1.7</span>
     </div>
     <div class="subtitle">HYPER Water 設置で使った部材を集計</div>
     <div class="price-date" id="priceDate"></div>
@@ -760,6 +772,32 @@
     return Math.min(n, QTY_MAX);
   }
   let openCats = {};
+  // v1.7: サイズ別の小グループ（表示だけ。データは変えない）
+  const SZ_KEY = "hwParts.sizeOpen.v1";
+  let openSz = {}; try{ openSz = JSON.parse(localStorage.getItem(SZ_KEY)) || {}; }catch(e){ openSz = {}; }
+  const saveSz = () => { try{ localStorage.setItem(SZ_KEY, JSON.stringify(openSz)); }catch(e){} };
+  const PIPE_A = [6, 8, 10, 13, 15, 20, 25, 30, 32, 40, 50, 65, 80, 100];
+  const INCH_A = { "1/4": 8, "3/8": 10, "1/2": 15, "3/4": 20, "1": 25, "1-1/4": 32, "11/4": 32, "1-1/2": 40, "11/2": 40, "2": 50, "2-1/2": 65, "3": 80, "4": 100 };
+  const BU_A = { 2: 8, 3: 10, 4: 15, 6: 20, 8: 25, 10: 32, 12: 40, 16: 50 };
+  function sizeA(t){   // 1つ分のサイズ表記 → A呼び径(数値) or null
+    t = t.trim();
+    let r = t.match(/^(\d+(?:-\d+\/\d+|\/\d+)?)\s*(?:B|インチ|吋)$/); if(r) return INCH_A[r[1]] || null;
+    r = t.match(/^(\d+)\s*分$/); if(r) return BU_A[r[1]] || null;
+    r = t.match(/^(\d+)\s*(?:A|ミリ|mm|φ)?$/i); if(r){ const n = +r[1]; return PIPE_A.includes(n) ? n : null; }
+    return null;
+  }
+  function sizeGroup(m){   // → 数値(A) / "異型" / null
+    let t = nfkc(String(m.size || "")).replace(/[（(][^）)]*[）)]/g, "").replace(/ねじ径|用|呼び/g, "").replace(/\s+/g, "").toUpperCase();
+    if(!t) return null;
+    const two = t.match(/^(.+?)[×X\-~～](.+)$/);
+    if(two && !/^\d+-\d+\/\d+B$/.test(t)){
+      const a = sizeA(two[1]), b = sizeA(two[2]);
+      if(a && b) return a === b ? a : "異型";
+      return null;
+    }
+    return sizeA(t);
+  }
+  const szLabel = g => g === null ? "その他サイズ" : g === "異型" ? "異型（2つのサイズ）" : g + "A";
   let editingId = null;
   let deleteMode = false;          // v0.6: 削除モードON/OFF
   const deleteChecked = new Set(); // v0.6: 削除モードで選択中の部材ID
@@ -989,7 +1027,19 @@
       catEl.className = "cat" + (isOpen ? " open" : "");
 
       let itemsHtml = "";
-      group.forEach(m => itemsHtml += itemHtml(m));
+      const allInCat = materials.filter(m => m.cat === cat);
+      const kinds = new Set(allInCat.map(sizeGroup));
+      if(kinds.size < 2) group.forEach(m => itemsHtml += itemHtml(m));
+      else {
+        const gs = [...new Set(group.map(sizeGroup))].sort((a, b) => {
+          const r = x => x === null ? 1e9 + 1 : x === "異型" ? 1e9 : x; return r(a) - r(b); });
+        gs.forEach(g => {
+          const sub = group.filter(m => sizeGroup(m) === g), key = cat + "|" + szLabel(g);
+          const u = sub.filter(m => m.qty > 0).length, sum = sub.reduce((a, m) => a + amountOf(m), 0);
+          const op = (q || usedOnly) ? true : !!openSz[key];
+          itemsHtml += `<div class="szg${op ? " open" : ""}${u ? " used" : ""}"><button type="button" class="sz-head" data-key="${esc(key)}"><span class="sz-name">${esc(szLabel(g))}</span>${u ? `<span class="sz-badge">${u}点使用</span>` : ""}<span class="sz-sub"><span class="cat-count">${sub.length}点</span>${sum ? `<span class="sz-sum">${yen(sum)}</span>` : ""}<svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="#16323d" stroke-width="3"><path d="M6 9l6 6 6-6"/></svg></span></button><div class="sz-body">${sub.map(itemHtml).join("")}</div></div>`;
+        });
+      }
 
       catEl.innerHTML = `
         <button class="cat-head" data-cat="${esc(cat)}">
@@ -1141,6 +1191,8 @@
         render();
       });
     });
+    listEl.querySelectorAll(".sz-head").forEach(btn => btn.addEventListener("click", () => {
+      openSz[btn.dataset.key] = !btn.parentElement.classList.contains("open"); saveSz(); render(); }));
     listEl.querySelectorAll("input.qty-in").forEach(sel => {
       sel.addEventListener("focus", e => e.target.select());
       sel.addEventListener("change", e => {
@@ -1280,6 +1332,7 @@
     const all = [...new Set(materials.map(m=>m.cat))];
     const allOpen = all.every(c => openCats[c]);
     all.forEach(c => openCats[c] = !allOpen);
+    materials.forEach(m => { openSz[m.cat + "|" + szLabel(sizeGroup(m))] = !allOpen; }); saveSz();
     expandBtn.textContent = allOpen ? "すべて開く" : "すべて閉じる";
     render();
   });
