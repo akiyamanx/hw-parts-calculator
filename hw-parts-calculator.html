@@ -22,6 +22,7 @@
   ※v1.2: 箱・袋売り部材の「入数」(packQty/packUnit)。単価=購入金額÷入数(表示は小数2桁まで)、各行の金額=単価×使用数を1円未満四捨五入、合計は四捨五入後の行金額の合計。編集画面で商品名・規格・入数を変更可(参照はidなので名前変更で集計は崩れない)。入数なし=従来どおり(保存形式v:3のまま・項目追加のみ)。使用数は0〜50のプルダウンをやめて直接入力(数字キーボード・全角OK・負/不正は0・個数は整数)
   ※v1.3: 部材ごとに価格の更新年月 pu:"YYYY-MM" を記録(単価/購入金額/入数/購入長を変えた時・新規追加・取り込みの新規・基準価格の一括更新)。古いデータは pu なし=「更新日なし」(日付は作らない)。表示: 集計の行(更新済みのみ小さく)・編集画面・重複をまとめる画面。まとめる時は残す方の価格と更新年月のまま
   ※v1.4: 全サブ画面(シート・棚卸し・集計表・工事価格表)に「← ホーム」。スマホの戻るボタン/ジェスチャーでもホーム(集計の部材表)へ(history.pushState)。サブ画面中は右上の工事価格表ボタンを隠し、ボタンは固定表示をやめてヘッダーと一緒にスクロール(重なり解消)
+  ※v1.8: 過去の集計を同じ現場名で保存すると「上書きして更新／別の集計として保存／やめる」を選べる(上書きは一番新しい同名の記録を中身ごと入れ替えて先頭へ)。一覧の各行に🗑削除ボタン。集計表のタイトルは長いと文字を小さくして1行に(最小12px・それでも入らなければ折り返し。印刷/PDF・過去の記録も同じ)。
   ※v1.7.1: サイズ分けは配管材だけ(m.pipe=1/0で個別に変更可・編集画面にチェック)。配管でない物(固定足・バンド・電気部材・消耗品)は並べるだけ。「その他」の一部を正しい種類へ移動(初期データ＋保存済み端末は1回だけ自動移行・元に戻すボタンあり)。
   ※v1.7: 部材表の各カテゴリをサイズ別の小グループで表示(13/15/20/25…の数字順・2つのサイズは「異型」・サイズ不明は「その他サイズ」・サイズが1種類だけのカテゴリはそのまま)。規格欄から読み取り(20A・(20A)・15ミリ・3/4B・6分など)。開閉はこの端末に記憶。検索・使った部材だけ表示の時は自動で開く。データ・集計・集計表・履歴は変更なし。
   ※v1.6: 過去の集計の詳細を集計表(印刷ビュー)と同じ見た目で表示(使った部材だけ)。「📖 見ながら集計」= 記録を見ながら今の集計を入力できる参照パネル。横に並べる(幅900px以上は左右、狭い画面は上下・境目をドラッグで高さ変更)／ポップアップ(ドラッグで移動・最小化・閉じる)。読むだけ・戻るボタン/← ホームで閉じる。
@@ -205,7 +206,10 @@
   .pv-print:active{background:var(--accent-deep);}
   .pv-page{background:#fff;max-width:700px;margin:16px auto 40px;padding:32px 28px;box-shadow:0 2px 12px rgba(0,0,0,.1);color:#1a1a1a;font-size:13px;line-height:1.45;}
   .pv-head{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2.5px solid #16323d;padding-bottom:9px;margin-bottom:15px;}
-  .pv-title{font-size:21px;font-weight:800;letter-spacing:.05em;}
+  .pv-page{container-type:inline-size;}
+  .pv-title{--tmax:21px;font-size:clamp(12px, calc((100cqw - 150px) / var(--tw, 10)), var(--tmax));font-weight:800;letter-spacing:.05em;flex:1;min-width:0;line-height:1.3;overflow-wrap:anywhere;}
+  .pv-date{flex:none;margin-left:10px;}
+  @container (max-width: 520px){ .pv-head{flex-wrap:wrap;} .pv-title{flex-basis:100%;font-size:clamp(12px, calc(100cqw / var(--tw, 10)), var(--tmax));} .pv-date{margin:4px 0 0 auto;} }
   .pv-date{font-size:12.5px;color:#444;}
   .pv-parties{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;gap:16px;}
   .pv-to{font-size:16.5px;font-weight:700;border-bottom:1px solid #16323d;padding:0 16px 2px 2px;}
@@ -253,7 +257,7 @@
   .ref-hd button{border:0;border-radius:8px;background:rgba(255,255,255,.16);color:#fff;font-weight:800;font-size:13px;padding:7px 10px;}
   .ref-body{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;padding:8px;}
   .ref-body .pv-page{margin:0 auto;padding:16px 14px;max-width:700px;font-size:12px;}
-  .ref-body .pv-title{font-size:17px;}
+  .ref-body .pv-title{--tmax:17px;}
   .ref-grip{flex:none;height:14px;background:#cfd6d9;cursor:ns-resize;touch-action:none;display:flex;align-items:center;justify-content:center;}
   .ref-grip::after{content:"";width:46px;height:4px;border-radius:2px;background:#7d8c92;}
   #refPane.split{top:0;left:0;right:0;height:var(--refH,42vh);}
@@ -285,6 +289,10 @@
   .dx-sub{display:block;font-size:11.5px;font-weight:500;color:var(--ink-soft);margin-top:3px;line-height:1.45;}
   @media (min-width:700px){ .data-btn.dx{flex:1 1 calc(50% - 8px);} }
   .pv-toolbar .pv-save{flex:none;padding-left:12px;padding-right:12px;background:#fff1d6;color:#7a4b00;}
+  .jb-item{display:flex;gap:6px;align-items:stretch;margin:0 0 8px;}
+  .jb-item .jb-row{margin:0;flex:1;min-width:0;}
+  .jb-del{flex:none;width:58px;border:1.5px solid #f1c9c4;background:#fff7f6;color:#b42318;border-radius:11px;font-size:17px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-family:inherit;}
+  .jb-del small{font-size:11px;font-weight:700;}
   .jb-row{display:block;width:100%;text-align:left;border:1.5px solid var(--line);background:#fff;border-radius:11px;padding:11px 12px;margin:0 0 8px;font-family:inherit;cursor:pointer;}
   .jb-row b{font-size:14.5px;color:var(--ink);} .jb-row .jb-s{display:flex;justify-content:space-between;font-size:12px;color:var(--ink-soft);margin-top:3px;}
   .jb-row .jb-g{font-weight:800;color:var(--accent-deep);font-size:13.5px;}
@@ -564,7 +572,7 @@
         <path d="M12 2.5C12 2.5 5 10 5 14.5C5 18.5 8.13 21.5 12 21.5C15.87 21.5 19 18.5 19 14.5C19 10 12 2.5 12 2.5Z" fill="#0a9396"/>
         <path d="M9 14.5C9 16.16 10.34 17.5 12 17.5" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>
       </svg>
-      HW部材集計 <span style="font-size:10.5px;font-weight:700;color:var(--ink-soft);opacity:.7;margin-left:2px;">v1.7.1</span>
+      HW部材集計 <span style="font-size:10.5px;font-weight:700;color:var(--ink-soft);opacity:.7;margin-left:2px;">v1.8</span>
     </div>
     <div class="subtitle">HYPER Water 設置で使った部材を集計</div>
     <div class="price-date" id="priceDate"></div>
@@ -1467,7 +1475,7 @@
 
     document.getElementById("pvPage").innerHTML = `
       <div class="pv-head">
-        <div class="pv-title">${esc(printParties.title)}</div>
+        ${pvTitleHtml(printParties.title)}
         <div class="pv-date">発行日：${dstr}</div>
       </div>
       <div class="pv-parties">
@@ -1551,11 +1559,17 @@
     L.push("", `小計　${yen(j.sub)}`, `消費税(${j.rate}%)　${yen(j.tax)}`, `総合計　${yen(j.grand)}`);
     return L.join("\n");
   }
+  // v1.8: タイトルは文字数から大きさを決めて1行に収める（画面幅・印刷幅どちらでも効くようにCSSのコンテナ幅で計算）
+  function pvTitleHtml(t){
+    t = String(t || ""); let w = 0;
+    for(const ch of t) w += /[\x20-\x7e\uff61-\uff9f]/.test(ch) ? 0.66 : 1.13;
+    return `<div class="pv-title" style="--tw:${Math.max(1, w).toFixed(2)}">${esc(t)}</div>`;
+  }
   function jobPvHtml(j){
     let rows = "", c = "";
     j.items.forEach(x => { if(x.cat !== c){ c = x.cat; rows += `<tr class="pv-catrow"><td colspan="4">${esc(c)}</td></tr>`; }
       rows += `<tr><td class="pv-nm">${esc(x.name)}${x.size ? ` <span class="pv-sz">(${esc(x.size)})</span>` : ""}</td><td class="pv-r">${x.unit}</td><td class="pv-r">${esc(x.qty)}</td><td class="pv-r">${yen(x.amt)}</td></tr>`; });
-    return `<div class="pv-head"><div class="pv-title">${esc(j.title || printParties.title)}</div><div class="pv-date">発行日：${jDate(j.date)}</div></div>
+    return `<div class="pv-head">${pvTitleHtml(j.title || printParties.title)}<div class="pv-date">発行日：${jDate(j.date)}</div></div>
       <div class="pv-parties"><div class="pv-to">${esc(j.to || "")}${j.site ? `<div style="font-size:13px;margin-top:6px;">現場：${esc(j.site)}</div>` : ""}</div><div class="pv-from">${ppFromHtml()}</div></div>
       <table class="pv-table"><thead><tr><th>品名・規格</th><th class="r">単価</th><th class="r">数量</th><th class="r">金額</th></tr></thead><tbody>${rows}</tbody></table>
       <div class="pv-totals"><div class="pv-trow"><span>小計</span><span>${yen(j.sub)}</span></div><div class="pv-trow"><span>消費税(${j.rate}%)</span><span>${yen(j.tax)}</span></div><div class="pv-trow pv-grand"><span>総合計</span><span>${yen(j.grand)}</span></div></div>
@@ -1572,12 +1586,21 @@
     const dt = () => document.getElementById("jbDate").value || jbToday();
     btn.addEventListener("click", () => {
       const j = snapTally(site() || "（現場名なし）", dt());
-      jobs.unshift(j); if(jobs.length > 300) jobs.length = 300;
-      saveState(); pvSavedId = j.id;
-      showUndo(`「${j.site}」を過去の集計に保存しました`, null, 4000);
-      if(after) after(j);
+      const done = (msg) => { if(jobs.length > 300) jobs.length = 300; saveState(); pvSavedId = j.id; showUndo(msg, null, 4000); if(after) after(j); };
+      const asNew = () => { jobs.unshift(j); done(`「${j.site}」を過去の集計に保存しました`); };
+      const key = jbKey(j.site);
+      const old = key && site() ? jobs.find(x => jbKey(x.site) === key) : null;   // jobsは新しい順 → 最初に見つかった＝一番新しい同名
+      if(!old) return asNew();
+      setTimeout(() => openDlg({ title: "同じ名前の集計があります", html: `同じ名前の集計があります。上書きして更新しますか？<br><span class="nm">「${esc(old.site)}」</span>（${jDate(old.date)}・${old.items.length}点・${yen(old.grand)}）<br><small>上書きすると、前の内容はこの新しい集計に入れ替わります（元に戻せません）。</small>`,
+        buttons: [{ t: "やめる", cls: "b-ghost" }, { t: "別の集計として保存", cls: "b-ghost", fn: asNew },
+          { t: "上書きして更新", cls: "b-pri", fn: () => { j.id = old.id; jobs = jobs.filter(x => x !== old); jobs.unshift(j); done(`「${j.site}」を上書きして更新しました`); } }] }), 0);
     }, { capture: true });
     setTimeout(() => { const el = document.getElementById("jbSite"); if(el) el.focus(); }, 50);
+  }
+  const jbKey = t => nfkc(t).replace(/[\s\u3000]+/g, "").toLowerCase();   // v1.8: 空白(全角含む)を無視して同じ名前か比べる
+  function delJob(j, after){
+    openDlg({ title: "集計を削除", html: `この集計を削除しますか？元に戻せません<br><span class="nm">「${esc(j.site)}」</span>（${jDate(j.date)}・${yen(j.grand)}）`,
+      buttons: [{ t: "やめる", cls: "b-ghost" }, { t: "削除する", cls: "b-pri", fn: () => { jobs = jobs.filter(x => x.id !== j.id); saveState(); after(); } }] });
   }
   function openJobs(q){
     const wrap = document.createElement("div");
@@ -1591,8 +1614,10 @@
         return k.split(/\s+/).every(w => hay.includes(w)); });
       document.getElementById("jbList").innerHTML = !jobs.length ? `<div class="card sh-hint">まだ記録はありません。<br>集計表を作成 →「💾 保存」で残せます。</div>`
         : !list.length ? `<div class="card sh-hint">見つかりませんでした。</div>`
-        : list.map(j => `<button type="button" class="jb-row" data-id="${esc(j.id)}"><b>${esc(j.site)}</b><div class="jb-s"><span>${jDate(j.date)}・${j.items.length}点</span><span class="jb-g">${yen(j.grand)}</span></div></button>`).join("");
+        : list.map(j => `<div class="jb-item"><button type="button" class="jb-row" data-id="${esc(j.id)}"><b>${esc(j.site)}</b><div class="jb-s"><span>${jDate(j.date)}・${j.items.length}点</span><span class="jb-g">${yen(j.grand)}</span></div></button><button type="button" class="jb-del" data-id="${esc(j.id)}" aria-label="削除">🗑<small>削除</small></button></div>`).join("");
       document.querySelectorAll("#jbList .jb-row").forEach(b => b.addEventListener("click", () => openJob(b.dataset.id)));
+      document.querySelectorAll("#jbList .jb-del").forEach(b => b.addEventListener("click", e => { e.stopPropagation();
+        const j = jobs.find(x => x.id === b.dataset.id); if(j) delJob(j, draw); }));
     };
     document.getElementById("jbQ").addEventListener("input", draw); draw();
   }
@@ -1618,8 +1643,7 @@
       pvRec = j; document.getElementById("pvPage").innerHTML = jobPvHtml(j);
       const pv = document.getElementById("printView"); pv.classList.add("pv-rec"); pv.classList.add("open"); pv.scrollTop = 0;
     });
-    document.getElementById("jbDel").addEventListener("click", () => openDlg({ title: "記録を削除", html: `<span class="nm">「${esc(j.site)}」</span>（${jDate(j.date)}・${yen(j.grand)}）の記録を削除します。元に戻せません。`,
-      buttons: [{ t: "やめる", cls: "b-ghost" }, { t: "削除する", cls: "b-pri", fn: () => { jobs = jobs.filter(x => x.id !== j.id); saveState(); openJobs(); } }] }));
+    document.getElementById("jbDel").addEventListener("click", () => delJob(j, () => openJobs()));
   }
   document.getElementById("jobsBtn").addEventListener("click", () => openJobs());
   // v1.6: 見ながら集計（参照パネル。読むだけ）
