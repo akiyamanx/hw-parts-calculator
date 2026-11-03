@@ -23,7 +23,7 @@
   ※v1.3: 部材ごとに価格の更新年月 pu:"YYYY-MM" を記録(単価/購入金額/入数/購入長を変えた時・新規追加・取り込みの新規・基準価格の一括更新)。古いデータは pu なし=「更新日なし」(日付は作らない)。表示: 集計の行(更新済みのみ小さく)・編集画面・重複をまとめる画面。まとめる時は残す方の価格と更新年月のまま
   ※v1.4: 全サブ画面(シート・棚卸し・集計表・工事価格表)に「← ホーム」。スマホの戻るボタン/ジェスチャーでもホーム(集計の部材表)へ(history.pushState)。サブ画面中は右上の工事価格表ボタンを隠し、ボタンは固定表示をやめてヘッダーと一緒にスクロール(重なり解消)
   ※v1.8: 過去の集計を同じ現場名で保存すると「上書きして更新／別の集計として保存／やめる」を選べる(上書きは一番新しい同名の記録を中身ごと入れ替えて先頭へ)。一覧の各行に🗑削除ボタン。集計表のタイトルは長いと文字を小さくして1行に(最小12px・それでも入らなければ折り返し。印刷/PDF・過去の記録も同じ)。
-  ※v1.9: 「📝 手書きの在庫表を印刷」= 今の部材リストから毎回作る手書き用の在庫確認表(A4縦・白黒・値段なし)。番号(=部材id)・品名・規格・数量の記入欄・単位。種類ごと(配管材はサイズ別)。種類のON/OFFあり。葵ちゃんは写真から番号で count を作る(docs/AOI_INVENTORY_GUIDE.md)。
+  ※v1.9: 部材ごとの「在庫を数えるときの単位」(m.cnu・編集画面で選ぶ/自由入力。未設定は名前から自動: 長さ部材=m、ゴム板・袋類=枚、1袋=袋、1箱=箱、巻・テープ=巻、セット、保温材=本、他=個。値段計算は不変・バックアップに含む)。「📝 手書きの在庫表を印刷」= 今の部材リストから毎回作る手書き用の在庫確認表(A4縦・白黒・値段なし)。番号(=部材id)・品名・規格・数量の記入欄・単位。種類ごと(配管材はサイズ別)。種類のON/OFFあり。葵ちゃんは写真から番号で count を作る(docs/AOI_INVENTORY_GUIDE.md)。
   ※v1.7.1: サイズ分けは配管材だけ(m.pipe=1/0で個別に変更可・編集画面にチェック)。配管でない物(固定足・バンド・電気部材・消耗品)は並べるだけ。「その他」の一部を正しい種類へ移動(初期データ＋保存済み端末は1回だけ自動移行・元に戻すボタンあり)。
   ※v1.7: 部材表の各カテゴリをサイズ別の小グループで表示(13/15/20/25…の数字順・2つのサイズは「異型」・サイズ不明は「その他サイズ」・サイズが1種類だけのカテゴリはそのまま)。規格欄から読み取り(20A・(20A)・15ミリ・3/4B・6分など)。開閉はこの端末に記憶。検索・使った部材だけ表示の時は自動で開く。データ・集計・集計表・履歴は変更なし。
   ※v1.6: 過去の集計の詳細を集計表(印刷ビュー)と同じ見た目で表示(使った部材だけ)。「📖 見ながら集計」= 記録を見ながら今の集計を入力できる参照パネル。横に並べる(幅900px以上は左右、狭い画面は上下・境目をドラッグで高さ変更)／ポップアップ(ドラッグで移動・最小化・閉じる)。読むだけ・戻るボタン/← ホームで閉じる。
@@ -83,6 +83,7 @@
   .mig-banner{background:#eef8f6;border:1px solid var(--accent);border-radius:12px;padding:10px 12px;margin-bottom:9px;font-size:13px;color:var(--ink);line-height:1.5;}
   .mig-btns{display:flex;gap:8px;margin-top:8px;}
   .mig-btns button{flex:1;border:1px solid var(--accent);background:#fff;color:var(--accent-deep);border-radius:8px;padding:8px;font-weight:700;font-family:inherit;}
+  .ep-cu{margin:8px 0 4px;} .ep-cu label{display:block;font-size:12px;font-weight:700;color:var(--ink-soft);margin-bottom:3px;} .ep-cu-row{display:flex;gap:6px;} .ep-cu-row select,.ep-cu-row input{font-size:16px;padding:8px;border:1.5px solid var(--line);border-radius:9px;font-family:inherit;} .ep-cu-row input{width:6em;} .ep-cu-d,.ep-cu-len{font-size:11.5px;color:var(--ink-soft);margin:3px 0;}
   .ep-pipe{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink);margin:6px 2px;}
   .szg{border:1px solid var(--line);border-radius:10px;margin:6px 0;background:#fbfcfc;}
   .szg.used{border-color:var(--accent);background:#f3fbfb;}
@@ -1012,6 +1013,21 @@
   const PACK_UNITS = ["個","本","枚","巻","組","袋","セット"];
   const isPack = m => m.mode !== 'length' && Number(m.packQty) > 1;
   const pkU = m => m.packUnit || "個";
+  // v1.9: 在庫を数えるときの単位（手書きの在庫表用。値段の計算には使わない）。m.cnu=手で選んだ単位(優先)
+  const CNT_UNITS = ["個", "本", "m", "巻", "枚", "箱", "袋", "組", "セット"];
+  function cntGuess(m){
+    if(m.mode === 'length') return "m";
+    const t = nfkc((m.name || "") + " " + (m.size || ""));
+    if(/ゴミ袋|土嚢袋|ゴム板|[0-9]枚[)）]?$|[(（]1枚[)）]/.test(t)) return "枚";
+    if(/袋ナット/.test(t) && !/1袋/.test(t)) return /セット/.test(t) ? "セット" : "個";
+    if(/1袋|[(（]1袋/.test(t)) return "袋";
+    if(/1箱|[(（]1箱/.test(t)) return "箱";
+    if(/巻|テープ/.test(t)) return "巻";
+    if(/セット/.test(t)) return "セット";
+    if(/保温材|パイプ|直管/.test(t)) return "本";
+    return "個";
+  }
+  const cntU = m => m.mode === 'length' ? "m" : (m.cnu || cntGuess(m));
   const unitOf  = m => (m.mode==='length' && m.packLen>0) ? m.price/m.packLen : (isPack(m) ? m.price/m.packQty : m.price);
   // 丸め: 各行の金額 = 単価×使用数 を1円未満四捨五入。小計はその合計
   const amountOf = m => Math.round(unitOf(m) * (Number(m.qty) || 0));
@@ -1246,6 +1262,11 @@
             <select class="ep-pu">${PACK_UNITS.map(u => `<option${u===pkU(m)?" selected":""}>${u}</option>`).join("")}</select>
           </div>
         </div>
+        <div class="ep-cu ep-pk-f" style="${isLen?"display:none;":""}"><label>在庫を数えるときの単位（手書きの在庫表にのります）</label>
+          <div class="ep-cu-row"><select class="ep-cus">${CNT_UNITS.map(u => `<option${u===cntU(m)?" selected":""}>${u}</option>`).join("")}<option value="__free"${CNT_UNITS.includes(cntU(m))?"":" selected"}>その他（自分で書く）</option></select>
+          <input type="text" class="ep-cuf" maxlength="4" placeholder="例：缶" value="${CNT_UNITS.includes(cntU(m)) ? "" : esc(cntU(m))}" style="${CNT_UNITS.includes(cntU(m))?"display:none;":""}"></div>
+          <div class="ep-cu-d">値段の計算は変わりません。${m.cnu ? "" : "（いまは名前から自動で選んでいます）"}</div></div>
+        <div class="ep-cu-len" style="${isLen?"":"display:none;"}">在庫を数えるときの単位：m（長さで入れる部材は m で数えます）</div>
         <label class="ep-pipe"><input type="checkbox" class="ep-pp" ${isPipe(m) ? "checked" : ""}> 配管材としてサイズ別に分ける</label>
         <div class="ep-pu-d">💴 価格: ${puTxt(m)}</div>
         <div class="ep-hint" id="ephint-${m.id}"></div>
@@ -1335,6 +1356,11 @@
       lenInp.addEventListener("input", updateHint);
       pqInp.addEventListener("input", updateHint);
       puSel.addEventListener("change", updateHint);
+      const cuSel = panel.querySelector(".ep-cus"), cuFree = panel.querySelector(".ep-cuf");
+      cuSel.addEventListener("change", () => { cuFree.style.display = cuSel.value === "__free" ? "" : "none"; if(cuSel.value === "__free") cuFree.focus(); });
+      panel.querySelectorAll(`input[name="epmode-${id}"]`).forEach(r => r.addEventListener("change", () => {
+        const isLen = panel.querySelector(`input[name="epmode-${id}"]:checked`).value === 'length';
+        panel.querySelector(".ep-cu-len").style.display = isLen ? "" : "none"; }));
       panel.querySelector(".ep-cancel").addEventListener("click", () => { editingId = null; render(); });
       panel.querySelector(".ep-save").addEventListener("click", () => {
         const m = materials.find(x => x.id === id);
@@ -1351,6 +1377,8 @@
         if(mode !== 'length' && pqOf()){ m.packQty = pqOf(); m.packUnit = puSel.value; }
         else { delete m.packQty; delete m.packUnit; }
         m.mode = mode;
+        { const v = cuSel.value === "__free" ? nfkc(cuFree.value).trim().slice(0, 4) : cuSel.value;   // v1.9: 数え方の単位（手で選んだら保存＝優先）
+          if(!v || v === cntGuess(m)) delete m.cnu; else m.cnu = v; }
         applyMeta(m, epMeta.get());
         if(mode==='length'){
           const L = Math.max(0, parseFloat(lenInp.value) || 0);
@@ -1681,7 +1709,7 @@
   document.getElementById("jobsBtn").addEventListener("click", () => openJobs());
   // v1.9 手書き在庫表（部材リストから毎回作る＝部材が増えても自動で反映。値段はのせない）
   const csOff = new Set();
-  const csUnit = m => m.mode === "length" ? "m" : "個";
+  const csUnit = m => esc(cntU(m));
   function csCatsList(){
     const ci = [...new Set(materials.map(m => m.cat))];
     return [...CAT_ORDER.filter(c => ci.includes(c)), ...ci.filter(c => !CAT_ORDER.includes(c))];
@@ -1850,6 +1878,7 @@
     if(Array.isArray(m.al)){ m.al = normAliases(m.al); if(!m.al.length) delete m.al; } else delete m.al;   // v0.9
     if(typeof m.shop === "string" && m.shop.trim()) m.shop = m.shop.trim().slice(0, 30); else delete m.shop;
     if(m.cu) m.cu = 1; else delete m.cu;
+    if(typeof m.cnu === "string" && m.cnu.trim()) m.cnu = m.cnu.trim().slice(0, 4); else delete m.cnu;   // v1.9
     if(m.pipe != null) m.pipe = m.pipe ? 1 : 0;   // v1.7.1
     if(!(typeof m.pu === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(m.pu))) delete m.pu;   // v1.3
     // v1.2: 入数(無い/1以下/変な値 → 項目ごと消す＝従来どおり1個単位)
