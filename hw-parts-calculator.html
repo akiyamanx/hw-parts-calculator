@@ -22,7 +22,7 @@
   ※v1.2: 箱・袋売り部材の「入数」(packQty/packUnit)。単価=購入金額÷入数(表示は小数2桁まで)、各行の金額=単価×使用数を1円未満四捨五入、合計は四捨五入後の行金額の合計。編集画面で商品名・規格・入数を変更可(参照はidなので名前変更で集計は崩れない)。入数なし=従来どおり(保存形式v:3のまま・項目追加のみ)。使用数は0〜50のプルダウンをやめて直接入力(数字キーボード・全角OK・負/不正は0・個数は整数)
   ※v1.3: 部材ごとに価格の更新年月 pu:"YYYY-MM" を記録(単価/購入金額/入数/購入長を変えた時・新規追加・取り込みの新規・基準価格の一括更新)。古いデータは pu なし=「更新日なし」(日付は作らない)。表示: 集計の行(更新済みのみ小さく)・編集画面・重複をまとめる画面。まとめる時は残す方の価格と更新年月のまま
   ※v1.4: 全サブ画面(シート・棚卸し・集計表・工事価格表)に「← ホーム」。スマホの戻るボタン/ジェスチャーでもホーム(集計の部材表)へ(history.pushState)。サブ画面中は右上の工事価格表ボタンを隠し、ボタンは固定表示をやめてヘッダーと一緒にスクロール(重なり解消)
-  ※v1.5: 「過去の集計」= 集計表(印刷ビュー)の「💾 保存」で現場名・日付・明細(その時点の単価/数量/金額)・合計をスナップショット保存(state.jobs・最大300件・バックアップに含む)。一覧(新しい順・現場名/年月で検索)→詳細(読むだけ)→印刷/PDF・テキストコピー・削除。ボタン名: バックアップを保存／バックアップから元に戻す／入出庫ファイルを取り込む(説明1行つき)
+  ※v1.5: 「過去の集計」= 集計表(印刷ビュー)の「💾 保存」で現場名・日付・明細(その時点の単価/数量/金額)・合計をスナップショット保存(state.jobs・最大300件・バックアップに含む)。一覧(新しい順・現場名/年月で検索)→詳細(読むだけ)→印刷/PDF・テキストコピー・削除。ボタン名: バックアップを保存／バックアップから元に戻す／在庫データを取り込む(説明1行つき)。「🦋 葵ちゃんと在庫を数えるとき」= 手順と葵ちゃんへのメッセージのコピー(docs/AOI_INVENTORY_GUIDE.md)
 -->
 <html lang="ja">
 <head>
@@ -597,7 +597,8 @@
     <button class="data-btn dx" id="exportBtn" type="button">💾 バックアップを保存<span class="dx-sub">部材・価格・数量・在庫・過去の集計を1つのファイルにして保存（機種変更・もしもの時用）</span></button>
     <button class="data-btn dx" id="importBtn" type="button">♻️ バックアップから元に戻す<span class="dx-sub">保存したバックアップファイルで、今のデータを全部置き換えます</span></button>
     <input type="file" id="importFile" accept="application/json,.json" style="display:none;">
-    <button class="data-btn dx" id="opsBtn" type="button">📥 入出庫ファイルを取り込む<span class="dx-sub">入出庫の記録ファイル（.json）で在庫を足し引き・部材を追加。今のデータは消えません</span></button>
+    <button class="data-btn dx" id="opsBtn" type="button">📥 在庫データを取り込む<span class="dx-sub">葵ちゃんと在庫を数えたときに作ったファイル(.json)で、在庫を足し引き。今のデータは消えません</span></button>
+    <button class="data-btn dx aoi-help" type="button">🦋 葵ちゃんと在庫を数えるとき<span class="dx-sub">手順と、葵ちゃんに送るメッセージ（コピーできます）</span></button>
     <input type="file" id="opsFile" accept="application/json,.json" style="display:none;">
   </div>
   <!-- 削除モード中だけ出るボタン行 v0.6追加 -->
@@ -648,7 +649,7 @@
     <button class="st-btn" id="stOrder" type="button">🛒 発注リスト</button>
     <button class="st-btn" id="stHist" type="button">📜 履歴</button>
   </div>
-  <div class="st-actions second"><button class="st-btn" id="stImport" type="button">📥 入出庫ファイルを取り込む</button></div>
+  <div class="st-actions second"><button class="st-btn" id="stImport" type="button">📥 在庫データを取り込む</button><button class="st-btn aoi-help" type="button">🦋 葵ちゃんと在庫を数えるとき</button></div>
   <section class="vc-card" id="vcCard" aria-labelledby="vcH">
     <div class="vc-h" id="vcH">声で入力 <span class="vc-sub">話した内容を入出庫にします</span></div>
     <label class="vc-l" for="vcText">話した内容</label>
@@ -1498,6 +1499,21 @@
       buttons: [{ t: "やめる", cls: "b-ghost" }, { t: "削除する", cls: "b-pri", fn: () => { jobs = jobs.filter(x => x.id !== j.id); saveState(); openJobs(); } }] }));
   }
   document.getElementById("jobsBtn").addEventListener("click", () => openJobs());
+  // v1.5: 葵ちゃんと在庫を数えるときのヘルプ
+  const AOI_MSG = "葵ちゃん、HW部材集計の在庫集計をやろう。手順は akiyamanx/hw-parts-calculator の docs/AOI_INVENTORY_GUIDE.md を見てね";
+  document.querySelectorAll(".aoi-help").forEach(b => b.addEventListener("click", () => {
+    openDlg({ title: "🦋 葵ちゃんと在庫を数えるとき", html: `<ol style="margin:0 0 10px;padding-left:20px;line-height:1.7">
+      <li>下のメッセージをコピーして葵ちゃんに送る</li>
+      <li>在庫の写真・メモ・声で数を伝える</li>
+      <li>葵ちゃんが作ったファイル(.json)を保存</li>
+      <li>「📥 在庫データを取り込む」で選ぶ → プレビューを見て取り込む（8秒なら取り消しOK）</li></ol>
+      <div id="aoiMsg" style="background:#f1f5f6;border-radius:10px;padding:10px;font-size:13px;user-select:all">${esc(AOI_MSG)}</div>
+      <button type="button" id="aoiCopy" class="b-pri" style="margin-top:10px;width:100%;padding:12px;border:0;border-radius:10px;font-weight:800">📋 メッセージをコピー</button>`,
+      buttons: [{ t: "閉じる", cls: "b-ghost" }] });
+    document.getElementById("aoiCopy").addEventListener("click", e => { const t = AOI_MSG, bt = e.target;
+      const done = () => { bt.textContent = "✓ コピーしたよ"; setTimeout(() => bt.textContent = "📋 メッセージをコピー", 1600); };
+      if(navigator.clipboard) navigator.clipboard.writeText(t).then(done).catch(() => fallbackCopy(t, done)); else fallbackCopy(t, done); });
+  }));
   document.getElementById("pvSave").addEventListener("click", () => askSaveJob(() => { document.getElementById("pvSave").textContent = "✓ 保存済み"; }));
   // 今の集計を印刷/PDFしたあと、まだ保存していなければ保存をすすめる
   document.getElementById("pvPrint").addEventListener("click", () => {

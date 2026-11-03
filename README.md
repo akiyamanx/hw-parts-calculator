@@ -1,5 +1,7 @@
 # HW部材集計アプリ
 
+> 🦋 **葵ちゃんへ**：在庫を一緒に数えるときは [docs/AOI_INVENTORY_GUIDE.md](docs/AOI_INVENTORY_GUIDE.md) を見てね（取り込みファイルの作り方）。
+
 HYPER Water（HW）の設置工事で使った部材と数量を集計し、マーフィード送付用の集計表（PDF）まで出力できる、スマホ向けの単一HTMLアプリ。
 
 ## 概要
