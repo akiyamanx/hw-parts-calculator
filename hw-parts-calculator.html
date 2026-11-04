@@ -8,7 +8,7 @@
   - 各部材の単価/購入金額/購入長/モード(個数⇔メートル)を編集可能(価格変動に対応)
   - カテゴリ折りたたみ＋検索、画面下に小計・消費税・総合計を固定表示
   - 新規部材の登録／削除、消費税率変更、集計のテキストコピー
-  - 印刷用集計表(マーフィード送付用)をワンタップ表示 → リコー等でPDF化
+  - 印刷用集計表(特定顧客送付用)をワンタップ表示 → リコー等でPDF化
   - 集計表の宛先・発行元(タイトル/宛先/会社名/住所)を画面から編集 → localStorage保存(v0.4・TODO3)
   作成: クロちゃん / COCOMI
   ※部材リスト(追加/編集/削除)・数量・税率はlocalStorageに自動保存され、再読込・アプリ終了でも消えないよ(v0.5)
@@ -713,15 +713,15 @@
       </div>
       <div class="field">
         <label>宛先(送り先)</label>
-        <input type="text" id="ppTo" autocomplete="off" placeholder="例：マーフィード　御中">
+        <input type="text" id="ppTo" autocomplete="off" placeholder="例：特定顧客　御中">
       </div>
       <div class="field">
         <label>発行元 会社名</label>
-        <input type="text" id="ppFromName" autocomplete="off" placeholder="例：株式会社AKC Total Support">
+        <input type="text" id="ppFromName" autocomplete="off" placeholder="例：(会社名)">
       </div>
       <div class="field">
         <label>発行元 住所・連絡先(改行OK)</label>
-        <textarea id="ppFromAddr" rows="3" placeholder="例：千葉県袖ケ浦市〇〇&#10;TEL：0438-XX-XXXX"></textarea>
+        <textarea id="ppFromAddr" rows="3" placeholder="例：(住所)&#10;TEL：(電話番号)"></textarea>
       </div>
       <div class="pp-reset-row">
         <button class="pp-reset" id="ppReset" type="button">初期値に戻す</button>
@@ -766,7 +766,7 @@
 <div class="dlg" id="dlg"><div class="dlg-box"><div class="dlg-title" id="dlgTitle"></div><div class="dlg-body" id="dlgBody"></div><div class="dlg-btns" id="dlgBtns"></div></div></div>
 <div class="utoast" id="undoToast"><span id="utMsg"></span><button type="button" id="utBtn">元に戻す</button></div>
 
-<!-- 印刷用 集計表ビュー(マーフィード送付用) -->
+<!-- 印刷用 集計表ビュー(特定顧客送付用) -->
 <div class="count-view" id="countView"><div class="cs-bar"><button type="button" id="csClose">← ホーム</button><button type="button" class="cs-print" id="csPrint">🖨 印刷 / PDF</button></div><div class="cs-cats" id="csCats"></div><div class="cs-page" id="csPage"></div></div>
 <div class="print-view" id="printView">
   <div class="pv-toolbar">
@@ -1047,9 +1047,9 @@
   const PP_KEY = "hwParts.printParties.v1";
   const PP_DEFAULTS = {
     title: "HW工事　部材集計",
-    to: "マーフィード　御中",
-    fromName: "株式会社AKC Total Support",
-    fromAddr: "千葉県袖ケ浦市"
+    to: "(宛先)　御中",
+    fromName: "(会社名)",
+    fromAddr: "(住所)"
   };
   let printParties = loadParties();
 
@@ -1503,7 +1503,7 @@
     closeForm(); render();
   });
 
-  // ===== 印刷用集計表(マーフィード送付用) =====
+  // ===== 印刷用集計表(特定顧客送付用) =====
   function buildPrintView(){
     const used = materials.filter(m => m.qty > 0);
     const subtotal = used.reduce((s,m) => s + amountOf(m), 0);
@@ -1638,7 +1638,7 @@
   }
   function askSaveJob(after){
     if(!materials.some(m => m.qty > 0)){ alert("まだ部材が選ばれてないよ"); return; }
-    openDlg({ title: "💾 過去の集計に保存", html: `<div class="field"><label>現場名</label><input type="text" id="jbSite" placeholder="例: 袖ケ浦 〇〇様邸" autocomplete="off" style="width:100%"></div>
+    openDlg({ title: "💾 過去の集計に保存", html: `<div class="field"><label>現場名</label><input type="text" id="jbSite" placeholder="例: 〇〇市 〇〇様邸" autocomplete="off" style="width:100%"></div>
       <div class="field"><label>日付</label><input type="date" id="jbDate" value="${jbToday()}" style="width:100%"></div>
       <div style="font-size:12px;color:var(--ink-soft);">今の単価・数量・金額をそのまま記録します（あとで価格を変えても記録は変わりません）。</div>`,
       buttons: [{ t: "やめる", cls: "b-ghost" }, { t: "保存する", cls: "b-pri", fn: () => {} }] });
@@ -1666,7 +1666,7 @@
   function openJobs(q){
     const wrap = document.createElement("div");
     wrap.innerHTML = `<div class="sh-hint">保存した現場ごとの集計です（新しい順）。集計表の画面の「💾 保存」で増えます。</div>
-      <div class="field"><input type="text" id="jbQ" placeholder="現場名・年月で検索（例: 袖ケ浦 / 2026-11 / 11月）" autocomplete="off" value="${esc(q || "")}"></div><div id="jbList"></div>`;
+      <div class="field"><input type="text" id="jbQ" placeholder="現場名・年月で検索（例: 〇〇市 / 2026-11 / 11月）" autocomplete="off" value="${esc(q || "")}"></div><div id="jbList"></div>`;
     openSheet("📚 過去の集計", wrap);
     const draw = () => {
       const k = nfkc(document.getElementById("jbQ").value).toLowerCase().trim();
