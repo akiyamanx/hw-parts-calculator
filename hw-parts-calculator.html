@@ -23,6 +23,7 @@
   ※v1.3: 部材ごとに価格の更新年月 pu:"YYYY-MM" を記録(単価/購入金額/入数/購入長を変えた時・新規追加・取り込みの新規・基準価格の一括更新)。古いデータは pu なし=「更新日なし」(日付は作らない)。表示: 集計の行(更新済みのみ小さく)・編集画面・重複をまとめる画面。まとめる時は残す方の価格と更新年月のまま
   ※v1.4: 全サブ画面(シート・棚卸し・集計表・工事価格表)に「← ホーム」。スマホの戻るボタン/ジェスチャーでもホーム(集計の部材表)へ(history.pushState)。サブ画面中は右上の工事価格表ボタンを隠し、ボタンは固定表示をやめてヘッダーと一緒にスクロール(重なり解消)
   ※v1.8: 過去の集計を同じ現場名で保存すると「上書きして更新／別の集計として保存／やめる」を選べる(上書きは一番新しい同名の記録を中身ごと入れ替えて先頭へ)。一覧の各行に🗑削除ボタン。集計表のタイトルは長いと文字を小さくして1行に(最小12px・それでも入らなければ折り返し。印刷/PDF・過去の記録も同じ)。
+  ※v2.0 第1歩(2026-11-11): 起動時に「HW部材集計」か「一般見積り・請求書」を選ぶスタート画面。HWは従来どおり（保存キーもそのまま）。一般モードの部材リストは初回だけHWマスターをコピー（名前・種類・規格・単位・入数・アプリ内の単価。使用数・在庫・過去の集計はコピーしない）。以後の編集は互いに影響しない。一般初回作成の前にHWキーを端末内へバックアップ（1回だけ・上書きしない）。見積書・請求書の本作成は次のステップ。公開URLは変えない。
   ※v1.9: 部材ごとの「在庫を数えるときの単位」(m.cnu・編集画面で選ぶ/自由入力。未設定は名前から自動: 長さ部材=m、ゴム板・袋類=枚、1袋=袋、1箱=箱、巻・テープ=巻、セット、保温材=本、他=個。値段計算は不変・バックアップに含む)。「📝 手書きの在庫表を印刷」= 今の部材リストから毎回作る手書き用の在庫確認表(A4縦・白黒・値段なし)。番号(=部材id)・品名・規格・数量の記入欄・単位。種類ごと(配管材はサイズ別)。種類のON/OFFあり。葵ちゃんは写真から番号で count を作る(docs/AOI_INVENTORY_GUIDE.md)。
   ※v1.7.1: サイズ分けは配管材だけ(m.pipe=1/0で個別に変更可・編集画面にチェック)。配管でない物(固定足・バンド・電気部材・消耗品)は並べるだけ。「その他」の一部を正しい種類へ移動(初期データ＋保存済み端末は1回だけ自動移行・元に戻すボタンあり)。
   ※v1.7: 部材表の各カテゴリをサイズ別の小グループで表示(13/15/20/25…の数字順・2つのサイズは「異型」・サイズ不明は「その他サイズ」・サイズが1種類だけのカテゴリはそのまま)。規格欄から読み取り(20A・(20A)・15ミリ・3/4B・6分など)。開閉はこの端末に記憶。検索・使った部材だけ表示の時は自動で開く。データ・集計・集計表・履歴は変更なし。
@@ -33,7 +34,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>HW部材集計</title>
+<title>見積り・請求書</title>
 <style>
   :root{
     --bg:#e9eff1; --surface:#ffffff; --ink:#16323d; --ink-soft:#5d7480;
@@ -594,9 +595,46 @@
   .vm{width:100%;border:1.5px solid var(--line);border-radius:8px;padding:9px 8px;font-size:14px;font-family:inherit;color:var(--ink);background:#fff;}
   .vl{display:flex;align-items:flex-start;gap:7px;font-size:12px;font-weight:700;color:var(--accent-deep);margin-top:8px;line-height:1.5;}
   .vl input{width:20px;height:20px;flex:none;accent-color:var(--accent);margin-top:1px;}
+
+  /* v2.0 スタート画面・モード切替 */
+  .mode-gate{display:none;position:fixed;inset:0;z-index:3000;background:var(--bg);align-items:center;justify-content:center;padding:24px 18px;overflow:auto;}
+  body.mode-pick .mode-gate{display:flex;}
+  body.mode-pick .wrap,body.mode-pick .totalbar,body.mode-pick .pt-open{display:none!important;}
+  .mg-card{width:100%;max-width:420px;background:var(--surface);border-radius:20px;padding:28px 22px 22px;box-shadow:var(--shadow);}
+  .mg-app{font-size:22px;font-weight:800;text-align:center;letter-spacing:.02em;}
+  .mg-lead{text-align:center;color:var(--ink-soft);font-size:14px;margin:8px 0 22px;line-height:1.6;}
+  .mg-btn{display:block;width:100%;border:none;border-radius:14px;padding:16px 14px;font-size:17px;font-weight:800;font-family:inherit;color:#fff;background:var(--accent);margin:0;cursor:pointer;}
+  .mg-btn.alt{background:var(--total-bg);}
+  .mg-sub{font-size:12px;color:var(--ink-soft);margin:6px 0 16px;line-height:1.55;padding:0 2px;}
+  .mg-rem{display:flex;align-items:flex-start;gap:8px;font-size:13px;font-weight:700;color:var(--ink);margin:4px 0 12px;line-height:1.45;}
+  .mg-rem input{width:20px;height:20px;flex:none;accent-color:var(--accent);margin-top:1px;}
+  .mg-note{font-size:11px;color:var(--ink-soft);text-align:center;line-height:1.5;}
+  .mode-back{display:none;margin-top:8px;border:none;background:transparent;color:var(--accent-deep);font-weight:800;font-size:13px;font-family:inherit;cursor:pointer;padding:4px 0;}
+  body.mode-hw .mode-back,body.mode-general .mode-back{display:inline-block;}
+  body.mode-general .viewbar,body.mode-general #viewStock,body.mode-general .totalbar,
+  body.mode-general .pt-open,body.mode-general .hw-only,body.mode-general #ppSection,
+  body.mode-general .filter-row .toggle,body.mode-general .item-bottom,body.mode-general .len-row,body.mode-general .cat-sum,body.mode-general .sz-sum,body.mode-general .price-btn{display:none!important;}
+  body.mode-general #genDocs{display:block;}
+  #genDocs{display:none;margin:0 0 14px;padding:12px;background:var(--surface);border-radius:14px;box-shadow:var(--shadow);}
+  #genDocs .gen-btns{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;}
+  #genDocs button{flex:1;min-width:140px;border:none;border-radius:12px;padding:12px 10px;font-size:14px;font-weight:800;font-family:inherit;background:var(--total-bg);color:#fff;cursor:pointer;}
+  #genHint{display:none;font-size:12px;color:var(--ink-soft);line-height:1.55;margin:0 0 12px;}
+  body.mode-general #genHint{display:block;}
 </style>
 </head>
-<body>
+<body class="mode-pick">
+<div id="modeGate" class="mode-gate" role="dialog" aria-label="モードを選ぶ">
+  <div class="mg-card">
+    <div class="mg-app">見積り・請求書</div>
+    <p class="mg-lead">使いたいモードを選んでね</p>
+    <button type="button" class="mg-btn" id="mgHw">🔧 HW部材集計</button>
+    <p class="mg-sub">いままでの部材集計・在庫・手書き在庫表。データは今までどおり、このモードの中だけに残ります。</p>
+    <button type="button" class="mg-btn alt" id="mgGen">📄 一般見積り・請求書</button>
+    <p class="mg-sub">見積書・請求書用の部材リスト（HWとは別のデータ）。初めて開くときは、HWの部材名などをコピーして用意します。</p>
+    <label class="mg-rem"><input type="checkbox" id="mgRemember">次回からこのモードで開く（いつでも「モードを選ぶ」から戻れます）</label>
+    <p class="mg-note">この画面の名前は「見積り・請求書」です。保存したページのアドレスは今までと同じです。</p>
+  </div>
+</div>
 <div class="wrap">
   <header>
     <div class="title">
@@ -604,9 +642,10 @@
         <path d="M12 2.5C12 2.5 5 10 5 14.5C5 18.5 8.13 21.5 12 21.5C15.87 21.5 19 18.5 19 14.5C19 10 12 2.5 12 2.5Z" fill="#0a9396"/>
         <path d="M9 14.5C9 16.16 10.34 17.5 12 17.5" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>
       </svg>
-      HW部材集計 <span style="font-size:10.5px;font-weight:700;color:var(--ink-soft);opacity:.7;margin-left:2px;">v1.9</span>
+      <span id="appTitle">HW部材集計</span> <span id="appVer" style="font-size:10.5px;font-weight:700;color:var(--ink-soft);opacity:.7;margin-left:2px;">v2.0</span>
     </div>
-    <div class="subtitle">HYPER Water 設置で使った部材を集計</div>
+    <div class="subtitle" id="appSub">HYPER Water 設置で使った部材を集計</div>
+    <button type="button" class="mode-back" id="modeBackBtn">← モードを選ぶ</button>
     <div class="price-date" id="priceDate"></div>
   </header>
 
@@ -627,6 +666,13 @@
     </div>
   </div>
 
+  <p id="genHint">この部材リストは、初めて開いたときに「HW部材集計」の部材名などをコピーして作っています。こちらで直しても、HWのほうは変わりません。見積書・請求書の作成は次のステップで用意します。</p>
+  <div id="genDocs">
+    <div class="gen-btns">
+      <button type="button" id="genEstBtn">📄 見積書を作る</button>
+      <button type="button" id="genInvBtn">🧾 請求書を作る</button>
+    </div>
+  </div>
   <div id="list"></div>
 
   <button class="add-btn" id="addBtn"><span style="font-size:18px;line-height:1;">＋</span> 新しい部材を追加</button>
@@ -680,14 +726,14 @@
   <div class="data-tools" id="dataTools">
     <button class="data-btn" id="deleteModeBtn" type="button">🗑️ 項目を削除</button>
     <button class="data-btn" id="mergeBtn" type="button">🔗 重複をまとめる</button>
-    <button class="data-btn" id="resetQtyBtn" type="button">🧹 数量を全部リセット</button>
-    <button class="data-btn dx" id="countSheetBtn" type="button">📝 手書きの在庫表を印刷<span class="dx-sub">今の部材リストで、数を手で書き込む紙を作ります（コピー機用・値段はのりません）</span></button>
-    <button class="data-btn dx" id="jobsBtn" type="button">📚 過去の集計<span class="dx-sub">保存した現場ごとの集計を見る・印刷・コピー</span></button>
-    <button class="data-btn dx" id="exportBtn" type="button">💾 バックアップを保存<span class="dx-sub">部材・価格・数量・在庫・過去の集計を1つのファイルにして保存（機種変更・もしもの時用）</span></button>
-    <button class="data-btn dx" id="importBtn" type="button">♻️ バックアップから元に戻す<span class="dx-sub">保存したバックアップファイルで、今のデータを全部置き換えます</span></button>
+    <button class="data-btn hw-only" id="resetQtyBtn" type="button">🧹 数量を全部リセット</button>
+    <button class="data-btn dx hw-only" id="countSheetBtn" type="button">📝 手書きの在庫表を印刷<span class="dx-sub">今の部材リストで、数を手で書き込む紙を作ります（コピー機用・値段はのりません）</span></button>
+    <button class="data-btn dx hw-only" id="jobsBtn" type="button">📚 過去の集計<span class="dx-sub">保存した現場ごとの集計を見る・印刷・コピー</span></button>
+    <button class="data-btn dx hw-only" id="exportBtn" type="button">💾 バックアップを保存<span class="dx-sub">部材・価格・数量・在庫・過去の集計を1つのファイルにして保存（機種変更・もしもの時用）</span></button>
+    <button class="data-btn dx hw-only" id="importBtn" type="button">♻️ バックアップから元に戻す<span class="dx-sub">保存したバックアップファイルで、今のデータを全部置き換えます</span></button>
     <input type="file" id="importFile" accept="application/json,.json" style="display:none;">
-    <button class="data-btn dx" id="opsBtn" type="button">📥 在庫データを取り込む<span class="dx-sub">葵ちゃんと在庫を数えたときに作ったファイル(.json)で、在庫を足し引き。今のデータは消えません</span></button>
-    <button class="data-btn dx aoi-help" type="button">🦋 葵ちゃんと在庫を数えるとき<span class="dx-sub">手順と、葵ちゃんに送るメッセージ（コピーできます）</span></button>
+    <button class="data-btn dx hw-only" id="opsBtn" type="button">📥 在庫データを取り込む<span class="dx-sub">葵ちゃんと在庫を数えたときに作ったファイル(.json)で、在庫を足し引き。今のデータは消えません</span></button>
+    <button class="data-btn dx aoi-help hw-only" type="button">🦋 葵ちゃんと在庫を数えるとき<span class="dx-sub">手順と、葵ちゃんに送るメッセージ（コピーできます）</span></button>
     <input type="file" id="opsFile" accept="application/json,.json" style="display:none;">
   </div>
   <!-- 削除モード中だけ出るボタン行 v0.6追加 -->
@@ -738,7 +784,7 @@
     <button class="st-btn" id="stOrder" type="button">🛒 発注リスト</button>
     <button class="st-btn" id="stHist" type="button">📜 履歴</button>
   </div>
-  <div class="st-actions second"><button class="st-btn" id="stImport" type="button">📥 在庫データを取り込む</button><button class="st-btn aoi-help" type="button">🦋 葵ちゃんと在庫を数えるとき</button></div>
+  <div class="st-actions second"><button class="st-btn" id="stImport" type="button">📥 在庫データを取り込む</button><button class="st-btn aoi-help hw-only" type="button">🦋 葵ちゃんと在庫を数えるとき</button></div>
   <section class="vc-card" id="vcCard" aria-labelledby="vcH">
     <div class="vc-h" id="vcH">声で入力 <span class="vc-sub">話した内容を入出庫にします</span></div>
     <label class="vc-l" for="vcText">話した内容</label>
@@ -804,9 +850,11 @@
 </div>
 
 <script>
+  var appMode = "pick"; // pick | hw | general  (v2.0)
   // ===== 部材データ(HW工事材料.xlsx より131件) =====
   // mode:'piece'=個数(price=単価, qty=個数) / 'length'=長物(price=購入金額, packLen=購入長m, qty=使用m)
   let materials = [{"id": 1, "cat": "HIVP", "name": "HI　エルボ", "size": "20A", "mode": "piece", "price": 72, "packLen": 0, "qty": 0}, {"id": 2, "cat": "HIVP", "name": "HI　エルボ", "size": "25A", "mode": "piece", "price": 109, "packLen": 0, "qty": 0}, {"id": 3, "cat": "HIVP", "name": "HI　ソケット", "size": "20A", "mode": "piece", "price": 59, "packLen": 0, "qty": 0}, {"id": 4, "cat": "HIVP", "name": "HI　ソケット", "size": "25A", "mode": "piece", "price": 88, "packLen": 0, "qty": 0}, {"id": 5, "cat": "HIVP", "name": "HI　チーズ", "size": "20A", "mode": "piece", "price": 109, "packLen": 0, "qty": 0}, {"id": 6, "cat": "HIVP", "name": "HI　チーズ", "size": "25A", "mode": "piece", "price": 169, "packLen": 0, "qty": 0}, {"id": 7, "cat": "HIVP", "name": "HI　イケイソケット", "size": "20A×25A", "mode": "piece", "price": 86, "packLen": 0, "qty": 0}, {"id": 8, "cat": "HIVP", "name": "HI　45℃", "size": "20A", "mode": "piece", "price": 109, "packLen": 0, "qty": 0}, {"id": 9, "cat": "HIVP", "name": "ＨＩ　キャップ", "size": "20Ａ", "mode": "piece", "price": 52, "packLen": 0, "qty": 0}, {"id": 10, "cat": "HIVP", "name": "HI　バルブソケット（インサート付き）", "size": "20A", "mode": "piece", "price": 399, "packLen": 0, "qty": 0}, {"id": 11, "cat": "HIVP", "name": "HI　バルブソケット（インサート付き）", "size": "25A", "mode": "piece", "price": 639, "packLen": 0, "qty": 0}, {"id": 12, "cat": "HIVP", "name": "HI　ユニオン", "size": "20Ａ", "mode": "piece", "price": 1498, "packLen": 0, "qty": 0}, {"id": 13, "cat": "HIVP", "name": "ＨＩＶＰ20Ａ　4ｍ", "size": "20Ａ", "mode": "length", "price": 1598, "packLen": 4, "qty": 0}, {"id": 14, "cat": "鋼管", "name": "エルボ水道用樹脂コーティング管継手", "size": "15A", "mode": "piece", "price": 249, "packLen": 0, "qty": 0}, {"id": 15, "cat": "鋼管", "name": "チーズ水道用樹脂コーティング管継手", "size": "15A", "mode": "piece", "price": 399, "packLen": 0, "qty": 0}, {"id": 16, "cat": "鋼管", "name": "六角ニップル水道用樹脂コーティング管継手", "size": "15A", "mode": "piece", "price": 399, "packLen": 0, "qty": 0}, {"id": 17, "cat": "鋼管", "name": "エルボ水道用樹脂コーティング管継手", "size": "20A（PV）", "mode": "piece", "price": 299, "packLen": 0, "qty": 0}, {"id": 18, "cat": "鋼管", "name": "チーズ水道用樹脂コーティング管継手", "size": "20A（PV）", "mode": "piece", "price": 449, "packLen": 0, "qty": 0}, {"id": 19, "cat": "鋼管", "name": "ソケット水道用樹脂コーティング管継手", "size": "20A（PV）", "mode": "piece", "price": 399, "packLen": 0, "qty": 0}, {"id": 20, "cat": "鋼管", "name": "六角ニップル水道用樹脂コーティング管継手", "size": "20A（PV）", "mode": "piece", "price": 419, "packLen": 0, "qty": 0}, {"id": 21, "cat": "鋼管", "name": "ストリートエルボ", "size": "20A（PV）", "mode": "piece", "price": 999, "packLen": 0, "qty": 0}, {"id": 22, "cat": "鋼管", "name": "エルボ水道用樹脂コーティング管継手", "size": "25A", "mode": "piece", "price": 479, "packLen": 0, "qty": 0}, {"id": 23, "cat": "鋼管", "name": "チーズ水道用樹脂コーティング管継手", "size": "25A", "mode": "piece", "price": 699, "packLen": 0, "qty": 0}, {"id": 24, "cat": "鋼管", "name": "六角ニップル水道用樹脂コーティング管継手", "size": "25A", "mode": "piece", "price": 519, "packLen": 0, "qty": 0}, {"id": 25, "cat": "鋼管", "name": "ソケット水道用樹脂コーティング管継手", "size": "25A", "mode": "piece", "price": 499, "packLen": 0, "qty": 0}, {"id": 26, "cat": "鋼管", "name": "ストリートエルボ", "size": "25Ａ", "mode": "piece", "price": 1498, "packLen": 0, "qty": 0}, {"id": 27, "cat": "鋼管", "name": "ブッシング水道用樹脂コーティング管継ぎ手", "size": "20Ａ×15Ａ", "mode": "piece", "price": 659, "packLen": 0, "qty": 0}, {"id": 28, "cat": "鋼管", "name": "ブッシング水道用樹脂コーティング管継ぎ手", "size": "25A×20A", "mode": "piece", "price": 829, "packLen": 0, "qty": 0}, {"id": 29, "cat": "鋼管", "name": "径違いチーズ水道用樹脂コーティング管継手", "size": "25A×20A（PV）", "mode": "piece", "price": 849, "packLen": 0, "qty": 0}, {"id": 30, "cat": "鋼管", "name": "径違いエルボ水道用樹脂コーティング管継手", "size": "25A×20A（PV）", "mode": "piece", "price": 779, "packLen": 0, "qty": 0}, {"id": 31, "cat": "鋼管", "name": "短管ニップル100ミリ水道用樹脂コーティング継ぎ手", "size": "25A（PV）", "mode": "piece", "price": 989, "packLen": 0, "qty": 0}, {"id": 32, "cat": "鋼管", "name": "短管ニップル125ミリ水道用樹脂コーティング継ぎ手", "size": "25Ａ", "mode": "piece", "price": 999, "packLen": 0, "qty": 0}, {"id": 33, "cat": "鋼管", "name": "短管ニップル75ｍｍ水道用樹脂コーティング管継手", "size": "20A（PV）", "mode": "piece", "price": 589, "packLen": 0, "qty": 0}, {"id": 34, "cat": "鋼管", "name": "異型チーズ（コーティング）２０×15", "size": "20Ａ×15Ａ", "mode": "piece", "price": 629, "packLen": 0, "qty": 0}, {"id": 35, "cat": "鋼管", "name": "イケイチーズ（コーティング）２5×15", "size": "25Ａ×15Ａ", "mode": "piece", "price": 849, "packLen": 0, "qty": 0}, {"id": 36, "cat": "鋼管", "name": "ポンプ用ブッシング32Ａ×25Ａ", "size": "32×25", "mode": "piece", "price": 1298, "packLen": 0, "qty": 0}, {"id": 37, "cat": "鋼管", "name": "ポンプ用ブッシング32Ａ×20Ａ", "size": "32×20", "mode": "piece", "price": 1298, "packLen": 0, "qty": 0}, {"id": 38, "cat": "バルブ", "name": "ボールバルブエア抜き用蝶ハンドル", "size": "15Ａ", "mode": "piece", "price": 2498, "packLen": 0, "qty": 0}, {"id": 39, "cat": "バルブ", "name": "FMボールバルブG13A　白　メス-オス", "size": "15A", "mode": "piece", "price": 3698, "packLen": 0, "qty": 0}, {"id": 40, "cat": "バルブ", "name": "ニッケルメッキフルボアボールバルブ 蝶ハンドル　黄銅", "size": "20A", "mode": "piece", "price": 2298, "packLen": 0, "qty": 0}, {"id": 41, "cat": "バルブ", "name": "逆止弁付きボールバルブ　（メスメス　Ｒネジ）", "size": "20Ａ", "mode": "piece", "price": 2598, "packLen": 0, "qty": 0}, {"id": 42, "cat": "バルブ", "name": "ゲートバルブ20Ａ", "size": "20Ａ", "mode": "piece", "price": 1498, "packLen": 0, "qty": 0}, {"id": 43, "cat": "バルブ", "name": "ボールバルブ フルボア黄銅 （ポンプ後、レバータイプ）", "size": "25A", "mode": "piece", "price": 2198, "packLen": 0, "qty": 0}, {"id": 44, "cat": "ホースニップル", "name": "ホースニップル　内径１５用", "size": "15Ａ", "mode": "piece", "price": 229, "packLen": 0, "qty": 0}, {"id": 45, "cat": "ホースニップル", "name": "ナット付ホースニップル適合ホース内径15ミリ用　（16ｍｍ）", "size": "ねじ径20A", "mode": "piece", "price": 1098, "packLen": 0, "qty": 0}, {"id": 46, "cat": "ホースニップル", "name": "ナット付ホースニップル適合ホース内径19ミリ用　（20.5ｍｍ）", "size": "ねじ径20A", "mode": "piece", "price": 1098, "packLen": 0, "qty": 0}, {"id": 47, "cat": "ホースニップル", "name": "オスホースニップル20.5ｍｍ", "size": "20Ａ", "mode": "piece", "price": 699, "packLen": 0, "qty": 0}, {"id": 48, "cat": "ホースニップル", "name": "デカホースニップル　ホース内径25.4用", "size": "25Ａ", "mode": "piece", "price": 1498, "packLen": 0, "qty": 0}, {"id": 49, "cat": "ホースニップル", "name": "ナット付ホースニップル", "size": "25A", "mode": "piece", "price": 2098, "packLen": 0, "qty": 0}, {"id": 50, "cat": "フレキニップル", "name": "フレキ用ニップル[配管/ポンプ/空圧・油圧編]", "size": "20A", "mode": "piece", "price": 389, "packLen": 0, "qty": 0}, {"id": 51, "cat": "フレキニップル", "name": "フレキニップル25A", "size": "25A", "mode": "piece", "price": 1527, "packLen": 0, "qty": 0}, {"id": 52, "cat": "フレキニップル", "name": "異径フレキニップル　20A側平行ねじ", "size": "20A×13A", "mode": "piece", "price": 629, "packLen": 0, "qty": 0}, {"id": 53, "cat": "フレキニップル", "name": "異径フレキニップル　20A側平行ねじ", "size": "25Ａ-20Ａ", "mode": "piece", "price": 1398, "packLen": 0, "qty": 0}, {"id": 54, "cat": "固定足・バンド", "name": "鋼管支持金具　調整式２０Ａ用", "size": "20Ａ", "mode": "piece", "price": 819, "packLen": 0, "qty": 0}, {"id": 55, "cat": "固定足・バンド", "name": "蝶番式立バンド", "size": "20A", "mode": "piece", "price": 139, "packLen": 0, "qty": 0}, {"id": 56, "cat": "固定足・バンド", "name": "T足　　200ミリ", "size": "20Ａ", "mode": "piece", "price": 289, "packLen": 0, "qty": 0}, {"id": 57, "cat": "固定足・バンド", "name": "T足　　150ミリ", "size": "20Ａ", "mode": "piece", "price": 219, "packLen": 0, "qty": 0}, {"id": 58, "cat": "固定足・バンド", "name": "T足　　50ミリ", "size": "20Ａ", "mode": "piece", "price": 98, "packLen": 0, "qty": 0}, {"id": 59, "cat": "固定足・バンド", "name": "T足　　80ミリ", "size": "80×25", "mode": "piece", "price": 118, "packLen": 0, "qty": 0}, {"id": 60, "cat": "固定足・バンド", "name": "ステンレスサドルバンド　27ミリ", "size": "6分用", "mode": "piece", "price": 65, "packLen": 0, "qty": 0}, {"id": 61, "cat": "固定足・バンド", "name": "ステンレスサドルバンド　34ミリ", "size": "8分用", "mode": "piece", "price": 89, "packLen": 0, "qty": 0}, {"id": 62, "cat": "基本水栓・継手", "name": "２口水栓　基本セット　カチット、普通", "size": "13Ａ", "mode": "piece", "price": 7698, "packLen": 0, "qty": 0}, {"id": 63, "cat": "基本水栓・継手", "name": "水栓継手", "size": "１３×13", "mode": "piece", "price": 1998, "packLen": 0, "qty": 0}, {"id": 64, "cat": "電気部材", "name": "防雨型延長コード3つ口　3芯　１０メートル", "size": "１０メートル", "mode": "length", "price": 6398, "packLen": 10, "qty": 0}, {"id": 65, "cat": "電気部材", "name": "防雨形延長コード　1口　3芯　5メートル", "size": "5Ｍ", "mode": "length", "price": 2998, "packLen": 5, "qty": 0}, {"id": 66, "cat": "電気部材", "name": "プラグカッパー2　　２口コンセント用防雨キャップ", "size": "1", "mode": "piece", "price": 649, "packLen": 0, "qty": 0}, {"id": 67, "cat": "電気部材", "name": "変換アダプター　3Ｐ～2Ｐ　アース付き", "size": "1", "mode": "piece", "price": 289, "packLen": 0, "qty": 0}, {"id": 68, "cat": "電気部材", "name": "ミラフレキSS", "size": "50M", "mode": "length", "price": 7798, "packLen": 50, "qty": 0}, {"id": 69, "cat": "電気部材", "name": "フレキコネクタ", "size": "10個入り", "mode": "piece", "price": 899, "packLen": 0, "qty": 0}, {"id": 70, "cat": "電気部材", "name": "メーターパッキン", "size": "1個", "mode": "piece", "price": 39, "packLen": 0, "qty": 0}, {"id": 71, "cat": "電気部材", "name": "PC2005F(ギボシメス）", "size": "100個", "mode": "piece", "price": 2198, "packLen": 0, "qty": 0}, {"id": 72, "cat": "電気部材", "name": "PC2005M(ギボシオス）", "size": "100個", "mode": "piece", "price": 2198, "packLen": 0, "qty": 0}, {"id": 73, "cat": "電気部材", "name": "Y端子3ミリ", "size": "100個", "mode": "piece", "price": 679, "packLen": 0, "qty": 0}, {"id": 74, "cat": "電気部材", "name": "Y端子4ミリ", "size": "100個", "mode": "piece", "price": 679, "packLen": 0, "qty": 0}, {"id": 75, "cat": "電気部材", "name": "R2-4丸端子4ミリ", "size": "100個", "mode": "piece", "price": 689, "packLen": 0, "qty": 0}, {"id": 76, "cat": "電気部材", "name": "R2-5丸端子5ミリ", "size": "100個", "mode": "piece", "price": 689, "packLen": 0, "qty": 0}, {"id": 77, "cat": "電気部材", "name": "裸圧着スリーブR1.25", "size": "100個", "mode": "piece", "price": 669, "packLen": 0, "qty": 0}, {"id": 78, "cat": "電気部材", "name": "耐熱電線", "size": "100M", "mode": "length", "price": 2790, "packLen": 100, "qty": 0}, {"id": 79, "cat": "電気部材", "name": "収縮チューブ", "size": "1M", "mode": "length", "price": 77, "packLen": 1, "qty": 0}, {"id": 80, "cat": "電気部材", "name": "アース線", "size": "10M", "mode": "length", "price": 1590, "packLen": 10, "qty": 0}, {"id": 81, "cat": "電気部材", "name": "絶縁キャップ　(赤） 200V", "size": "100個", "mode": "piece", "price": 579, "packLen": 0, "qty": 0}, {"id": 82, "cat": "電気部材", "name": "絶縁キャップ　(白） 200V", "size": "100個", "mode": "piece", "price": 579, "packLen": 0, "qty": 0}, {"id": 83, "cat": "電気部材", "name": "絶縁キャップ　（黒）　200Ｖ", "size": "１００個", "mode": "piece", "price": 579, "packLen": 0, "qty": 0}, {"id": 84, "cat": "電気部材", "name": "絶縁キャップ　（緑）　200Ｖ", "size": "１００個", "mode": "piece", "price": 469, "packLen": 0, "qty": 0}, {"id": 85, "cat": "電気部材", "name": "ＶＣＴＦ　4×0.75ｍｍ　(３点フロート用)", "size": "100ｍ", "mode": "length", "price": 19980, "packLen": 100, "qty": 0}, {"id": 86, "cat": "電気部材", "name": "ＶＣＴＦ　2×0.75ｍｍ　(渇水フロート用)", "size": "100ｍ", "mode": "length", "price": 9498, "packLen": 100, "qty": 0}, {"id": 87, "cat": "その他", "name": "巻フレキパイプステンレス製[配管/ポンプ/空圧・油圧編]", "size": "20（10ｍ/巻）", "mode": "length", "price": 5498, "packLen": 10, "qty": 0}, {"id": 88, "cat": "その他", "name": "袋ナットパッキンセットフレキ用[配管/ポンプ/空圧・油圧編]", "size": "20A", "mode": "piece", "price": 479, "packLen": 0, "qty": 0}, {"id": 89, "cat": "その他", "name": "給水キャップ　13Ａ", "size": "13Ａ", "mode": "piece", "price": 289, "packLen": 0, "qty": 0}, {"id": 90, "cat": "その他", "name": "給水キャップ　20Ａ", "size": "20Ａ用", "mode": "piece", "price": 459, "packLen": 0, "qty": 0}, {"id": 91, "cat": "その他", "name": "ブレードホース　内径15外形22ミリ　１０メートル", "size": "1", "mode": "length", "price": 3098, "packLen": 10, "qty": 0}, {"id": 92, "cat": "その他", "name": "フレキ用ゴムパッキン　20Ａ　1袋５０枚", "size": "20Ａ用", "mode": "piece", "price": 579, "packLen": 0, "qty": 0}, {"id": 93, "cat": "その他", "name": "25Ａ　ゴムフレキパッキン　　（１枚）", "size": "25Ａ", "mode": "piece", "price": 149, "packLen": 0, "qty": 0}, {"id": 94, "cat": "その他", "name": "ゴム板　２０ｍｍ　100×100　（ＫＰ土台用）", "size": "20ｍｍ", "mode": "piece", "price": 659, "packLen": 0, "qty": 0}, {"id": 95, "cat": "その他", "name": "パテ200ｇ　アイボリー", "size": "200ｇ", "mode": "piece", "price": 109, "packLen": 0, "qty": 0}, {"id": 96, "cat": "その他", "name": "パテ　グレー（大）", "size": "1", "mode": "piece", "price": 499, "packLen": 0, "qty": 0}, {"id": 97, "cat": "その他", "name": "タイラップ200ミリ　4.8ミリ　100本", "size": "", "mode": "piece", "price": 519, "packLen": 0, "qty": 0}, {"id": 98, "cat": "その他", "name": "タイラップ380ミリ　7.5ミリ　100本", "size": "", "mode": "piece", "price": 1398, "packLen": 0, "qty": 0}, {"id": 99, "cat": "その他", "name": "タイラップ　白　３００ミリ　外用", "size": "1袋", "mode": "piece", "price": 789, "packLen": 0, "qty": 0}, {"id": 100, "cat": "その他", "name": "座付きノンプラグビス　コンクリ用１箱", "size": "１箱１５０本", "mode": "piece", "price": 719, "packLen": 0, "qty": 0}, {"id": 101, "cat": "その他", "name": "ステンレス　コンクリビス　4×25", "size": "200本", "mode": "piece", "price": 1598, "packLen": 0, "qty": 0}, {"id": 102, "cat": "その他", "name": "ステンレス　コンクリビス　4×32", "size": "170本", "mode": "piece", "price": 1598, "packLen": 0, "qty": 0}, {"id": 103, "cat": "その他", "name": "パッキン　13Ａ　（50枚入り）", "size": "13Ａ", "mode": "piece", "price": 469, "packLen": 0, "qty": 0}, {"id": 104, "cat": "その他", "name": "片ナットアダプター", "size": "20Ａ用", "mode": "piece", "price": 939, "packLen": 0, "qty": 0}, {"id": 105, "cat": "その他", "name": "裸圧着スリーブ　Ｅ小（2ｍｍ×2本用）20個入り", "size": "Ｅ小", "mode": "piece", "price": 179, "packLen": 0, "qty": 0}, {"id": 106, "cat": "その他", "name": "HI バルブソケット（インサート付き）", "size": "30A", "mode": "piece", "price": 1098, "packLen": 0, "qty": 0}, {"id": 107, "cat": "その他", "name": "HI バルブソケット（インサート付き）", "size": "40A", "mode": "piece", "price": 1398, "packLen": 0, "qty": 0}, {"id": 108, "cat": "その他", "name": "HI エルボ", "size": "40A", "mode": "piece", "price": 249, "packLen": 0, "qty": 0}, {"id": 109, "cat": "その他", "name": "HI 異形チーズ", "size": "40A×25A", "mode": "piece", "price": 339, "packLen": 0, "qty": 0}, {"id": 110, "cat": "その他", "name": "異型チーズ", "size": "40A×20A", "mode": "piece", "price": 339, "packLen": 0, "qty": 0}, {"id": 111, "cat": "その他", "name": "異形ソケット", "size": "40A×25A", "mode": "piece", "price": 179, "packLen": 0, "qty": 0}, {"id": 112, "cat": "その他", "name": "水栓ソケット（インサート付き）", "size": "25A", "mode": "piece", "price": 859, "packLen": 0, "qty": 0}, {"id": 113, "cat": "その他", "name": "異型ソケット", "size": "40Ａ×25Ａ", "mode": "piece", "price": 179, "packLen": 0, "qty": 0}, {"id": 114, "cat": "その他", "name": "フロアーバンド", "size": "40A", "mode": "piece", "price": 459, "packLen": 0, "qty": 0}, {"id": 115, "cat": "その他", "name": "座付き水栓エルボ", "size": "13×13Ａ", "mode": "piece", "price": 1998, "packLen": 0, "qty": 0}, {"id": 116, "cat": "その他", "name": "フレキシブルメタルホース500ｍｍ", "size": "40A", "mode": "piece", "price": 5998, "packLen": 0, "qty": 0}, {"id": 117, "cat": "その他", "name": "黒　絶縁ビニールテープ", "size": "１０巻き", "mode": "piece", "price": 1498, "packLen": 0, "qty": 0}, {"id": 118, "cat": "その他", "name": "ＰＰサドルＶＰ用", "size": "40Ａ", "mode": "piece", "price": 199, "packLen": 0, "qty": 0}, {"id": 119, "cat": "その他", "name": "厚手ゴミ袋", "size": "10枚", "mode": "piece", "price": 349, "packLen": 0, "qty": 0}, {"id": 120, "cat": "その他", "name": "土嚢袋", "size": "５０枚", "mode": "piece", "price": 3050, "packLen": 0, "qty": 0}, {"id": 121, "cat": "その他", "name": "スイングチャッキバルブ", "size": "25A", "mode": "piece", "price": 8598, "packLen": 0, "qty": 0}, {"id": 122, "cat": "その他", "name": "キャンパス絹　黒", "size": "", "mode": "piece", "price": 159, "packLen": 0, "qty": 0}, {"id": 123, "cat": "その他", "name": "保温材　白20Ａ", "size": "", "mode": "piece", "price": 349, "packLen": 0, "qty": 0}, {"id": 124, "cat": "その他", "name": "保温材　白25Ａ", "size": "", "mode": "piece", "price": 419, "packLen": 0, "qty": 0}, {"id": 125, "cat": "その他", "name": "シールテープ　黒", "size": "", "mode": "piece", "price": 199, "packLen": 0, "qty": 0}, {"id": 126, "cat": "別注文", "name": "GH-EXCR-19　エクセルカラー19mm", "size": "1メートル", "mode": "length", "price": 650, "packLen": 1, "qty": 0}, {"id": 127, "cat": "別注文", "name": "GH-EXCR-25　エクセルカラー25mm", "size": "1メートル", "mode": "length", "price": 970, "packLen": 1, "qty": 0}, {"id": 128, "cat": "別注文", "name": "32イーデアルホースバンド（鉄）20-32mm用", "size": "", "mode": "piece", "price": 190, "packLen": 0, "qty": 0}, {"id": 129, "cat": "別注文", "name": "40イーデアルホースバンド（鉄）25-40mm用", "size": "", "mode": "piece", "price": 190, "packLen": 0, "qty": 0}, {"id": 130, "cat": "別注文", "name": "カムロック　アダプター　633-Ｆ　20Ａテーパーネジ　19ｍｍ用", "size": "20Ａ", "mode": "piece", "price": 1150, "packLen": 0, "qty": 0}, {"id": 131, "cat": "別注文", "name": "カムロック　シャンク　　633-Ｃ　ホースニップル付き　19ｍｍ用", "size": "20Ａ", "mode": "piece", "price": 1940, "packLen": 0, "qty": 0}];
+  const BUILTIN_SEED = JSON.parse(JSON.stringify(materials));   // v2.0: 初期部材の控え（loadStateで materials が変わっても残す）
   const CAT_ORDER = ["HIVP", "鋼管", "バルブ", "ホースニップル", "フレキニップル", "固定足・バンド", "基本水栓・継手", "電気部材", "その他", "別注文"];
   let nextId = materials.length + 1;
   var jobs = [];   // v1.5: 過去の集計(新しいものが前)
@@ -823,7 +871,7 @@
   // v1.7: サイズ別の小グループ（表示だけ。データは変えない）
   const SZ_KEY = "hwParts.sizeOpen.v1";
   let openSz = {}; try{ openSz = JSON.parse(localStorage.getItem(SZ_KEY)) || {}; }catch(e){ openSz = {}; }
-  const saveSz = () => { try{ localStorage.setItem(SZ_KEY, JSON.stringify(openSz)); }catch(e){} };
+  const saveSz = () => { if(appMode !== "hw") return; try{ localStorage.setItem(SZ_KEY, JSON.stringify(openSz)); }catch(e){} };
   const PIPE_A = [6, 8, 10, 13, 15, 20, 25, 30, 32, 40, 50, 65, 80, 100];
   const INCH_A = { "1/4": 8, "3/8": 10, "1/2": 15, "3/4": 20, "1": 25, "1-1/4": 32, "11/4": 32, "1-1/2": 40, "11/2": 40, "2": 50, "2-1/2": 65, "3": 80, "4": 100 };
   const BU_A = { 2: 8, 3: 10, 4: 15, 6: 20, 8: 25, 10: 32, 12: 40, 16: 50 };
@@ -893,6 +941,10 @@
   // ===== 作業状態の保存/復元（v0.5追加：カスタム部材＋単価編集＋数量＋税率を丸ごと自動保存） =====
   // 部材リスト・採番・税率を1キーにまとめて保存。入力のたびに自動セーブされ、再読込・アプリ終了でも消えない。
   const WORK_KEY = "hwParts.workState.v1";
+  const GEN_KEY = "genParts.workState.v1";           // v2.0 一般モードの部材（HWキーとは別）
+  const MODE_KEY = "appSelect.v1";                    // v2.0 最後に選んだモード / 自動で開くか
+  const BACKUP_KEY = "hwParts.backup.beforeGeneral.v1"; // v2.0 一般初回作成前のHW控え（1回だけ）
+  const HW_LS_KEYS = [WORK_KEY, "hwParts.printParties.v1", "hwParts.sizeOpen.v1", "hw_price_table_v1"];
   // v0.7: 基準価格の更新(2026-10-25)。保存済みデータには、手で変えていない価格だけ新価格を一度だけ反映する
   const PRICE_REV = "2026-10-25";
   // 更新前の初期価格(id:価格)。保存価格がこれと一致する＝手動編集なし、と判断する
@@ -949,6 +1001,8 @@
   }
   // localStorageへ保存（プライベートモード等で失敗しても画面動作は継続）
   function saveState(){
+    if(appMode === "general"){ saveGeneralState(); return; }
+    if(appMode !== "hw") return;   // スタート画面ではHWキーを書かない
     try{ localStorage.setItem(WORK_KEY, JSON.stringify(collectState())); }
     catch(e){ /* 保存不可でも無視して続行 */ }
   }
@@ -1063,6 +1117,7 @@
   }
   // localStorageへ保存(プライベートモード等で失敗しても画面動作は継続)
   function saveParties(){
+    if(appMode !== "hw") return;
     try{ localStorage.setItem(PP_KEY, JSON.stringify(printParties)); }
     catch(e){ /* 保存不可でも無視して続行 */ }
   }
@@ -3427,8 +3482,224 @@
     });
   })();
 
-  loadState();   // v0.5: 保存済みの作業状態（部材・数量・税率）を復元してから描画
-  render();
+
+  // ===== v2.0 モード切替・一般部材マスター（HWの保存キーは読んでも、モードが hw のとき以外は書かない） =====
+  function copyMasterFromHw(list){
+    return (list || []).filter(m => m && typeof m === "object" && m.id != null).map(m => {
+      const c = { id: m.id, cat: m.cat, name: m.name, size: m.size, mode: m.mode, price: m.price, packLen: m.packLen, qty: 0 };
+      if(m.packQty) c.packQty = m.packQty;
+      if(m.packUnit) c.packUnit = m.packUnit;
+      if(typeof m.pu === "string") c.pu = m.pu;
+      if(m.pipe != null) c.pipe = m.pipe;
+      if(typeof m.cnu === "string" && m.cnu.trim()) c.cnu = m.cnu.trim().slice(0, 4);
+      if(m.pe) c.pe = 1;
+      if(m.cu) c.cu = 1;
+      if(Array.isArray(m.al) && m.al.length) c.al = m.al.slice();
+      if(typeof m.shop === "string" && m.shop.trim()) c.shop = m.shop.trim().slice(0, 30);
+      return c;
+    });
+  }
+  function applyCatMovesTo(list){
+    (list || []).forEach(m => {
+      const to = CAT_MOVES[String(m.id)] || CAT_MOVES[m.id];
+      if(to && !m.cu && m.cat === "その他") m.cat = to;
+      if(PIPE_SET.includes(m.id) && !m.cu && m.pipe == null) m.pipe = 1;
+    });
+  }
+  function snapshotHwIfNeeded(){
+    try{
+      if(localStorage.getItem(BACKUP_KEY)) return false;   // 既にある控えは上書きしない
+      const snap = { at: new Date().toISOString(), keys: {} };
+      HW_LS_KEYS.forEach(k => { const v = localStorage.getItem(k); if(v != null) snap.keys[k] = v; });
+      localStorage.setItem(BACKUP_KEY, JSON.stringify(snap));
+      return true;
+    }catch(e){ return false; }
+  }
+  function collectGeneralState(){
+    return { v: 1, kind: "general", savedAt: new Date().toISOString(), nextId: nextId, materials: materials };
+  }
+  function saveGeneralState(){
+    if(appMode !== "general") return;
+    try{ localStorage.setItem(GEN_KEY, JSON.stringify(collectGeneralState())); }
+    catch(e){ /* 保存不可でも無視して続行 */ }
+  }
+  function readHwMaterialsForCopy(){
+    try{
+      const raw = localStorage.getItem(WORK_KEY);
+      if(raw){
+        const st = JSON.parse(raw);
+        if(st && Array.isArray(st.materials) && st.materials.length) return { list: st.materials, from: "hw" };
+      }
+    }catch(e){ /* 破損時は初期データからコピー */ }
+    const list = JSON.parse(JSON.stringify(BUILTIN_SEED));
+    applyCatMovesTo(list);
+    return { list, from: "builtin" };
+  }
+  function initGeneralIfNeeded(){
+    try{
+      const raw = localStorage.getItem(GEN_KEY);
+      if(raw){
+        const st = JSON.parse(raw);
+        // 空のリストでも「既に作った一般マスター」なら再コピーしない（全部削除した状態を守る）
+        if(st && Array.isArray(st.materials) && (st.materials.length || st.kind === "general")) return "exists";
+        try{ localStorage.setItem(GEN_KEY + ".corrupt", raw); }catch(e){}
+      }
+    }catch(e){
+      try{ const bad = localStorage.getItem(GEN_KEY); if(bad != null) localStorage.setItem(GEN_KEY + ".corrupt", bad); }catch(e2){}
+    }
+    snapshotHwIfNeeded();
+    const src = readHwMaterialsForCopy();
+    const copied = copyMasterFromHw(src.list);
+    applyCatMovesTo(copied);
+    const maxId = copied.reduce((mx, m) => Math.max(mx, m.id || 0), 0);
+    const state = {
+      v: 1, kind: "general",
+      copiedFrom: src.from,
+      copiedFromHwAt: new Date().toISOString(),
+      savedAt: new Date().toISOString(),
+      nextId: Math.max(maxId + 1, copied.length + 1),
+      materials: copied
+    };
+    localStorage.setItem(GEN_KEY, JSON.stringify(state));
+    return "created";
+  }
+  function loadGeneralState(){
+    try{
+      const raw = localStorage.getItem(GEN_KEY);
+      if(!raw) return false;
+      const st = JSON.parse(raw);
+      if(!st || !Array.isArray(st.materials) || !st.materials.length) return false;
+      materials = st.materials.filter(m => m && typeof m === "object" && m.id != null).map(m => {
+        const c = Object.assign({}, m);
+        cleanItem(c);
+        delete c.stock; delete c.reorder; delete c.counted;
+        if(c.qty == null || !isFinite(Number(c.qty))) c.qty = 0;
+        return c;
+      });
+      const maxId = materials.reduce((mx, m) => Math.max(mx, m.id || 0), 0);
+      nextId = Math.max(Number(st.nextId) || 0, maxId + 1);
+      jobs = []; stockLog = []; invRound = null; lastUse = null; dupIgnore = [];
+      imports = []; lastImp = null; catUndo = null; catMig = 1;
+      editingId = null; editingPriceId = null;
+      return true;
+    }catch(e){ return false; }
+  }
+  function resetSessionToBuiltin(){
+    materials = JSON.parse(JSON.stringify(BUILTIN_SEED));
+    nextId = materials.length + 1;
+    jobs = []; stockLog = []; invRound = null; lastUse = null; dupIgnore = [];
+    priceRev = PRICE_REV;
+    imports = []; lastImp = null; catMig = 1; catUndo = null;
+    editingId = null; editingPriceId = null;
+    const t = document.getElementById("taxRate"); if(t) t.value = 10;
+  }
+  function closeSubsQuiet(){
+    ["sheet","cv","printView","countView","dlg"].forEach(id => {
+      const el = document.getElementById(id); if(el) el.classList.remove("open");
+    });
+    const pt = document.getElementById("ptOv"); if(pt) pt.classList.remove("on");
+    const ref = document.getElementById("refPane"); if(ref) ref.classList.remove("open","split","pop","min");
+    document.body.classList.remove("ref-split","sub-open","del-on","v-stock");
+    document.body.style.overflow = "";
+    if(typeof deleteMode !== "undefined" && deleteMode) setDeleteMode(false);
+  }
+  function applyModeUi(){
+    document.body.classList.remove("mode-pick","mode-hw","mode-general");
+    document.body.classList.add("mode-" + appMode);
+    const title = document.getElementById("appTitle");
+    const sub = document.getElementById("appSub");
+    if(appMode === "hw"){
+      if(title) title.textContent = "HW部材集計";
+      if(sub) sub.textContent = "HYPER Water 設置で使った部材を集計";
+      document.title = "HW部材集計";
+    }else if(appMode === "general"){
+      if(title) title.textContent = "一般見積り・請求書";
+      if(sub) sub.textContent = "見積書・請求書用の部材リスト（HW部材集計とは別のデータです）";
+      document.title = "一般見積り・請求書";
+    }else{
+      document.title = "見積り・請求書";
+    }
+  }
+  function readModePref(){
+    try{ return JSON.parse(localStorage.getItem(MODE_KEY) || "null"); }catch(e){ return null; }
+  }
+  function writeModePref(last, auto){
+    try{ localStorage.setItem(MODE_KEY, JSON.stringify({ last: last, auto: !!auto, savedAt: new Date().toISOString() })); }catch(e){}
+  }
+  function enterHw(){
+    if(appMode === "general") saveGeneralState();
+    closeSubsQuiet();
+    appMode = "hw";
+    resetSessionToBuiltin();
+    loadState();
+    applyModeUi();
+    if(typeof setView === "function") setView("collect");
+    else render();
+  }
+  function enterGeneral(){
+    if(appMode === "hw") saveState();
+    closeSubsQuiet();
+    initGeneralIfNeeded();
+    appMode = "general";
+    resetSessionToBuiltin();
+    if(!loadGeneralState()){
+      initGeneralIfNeeded();
+      loadGeneralState();
+    }
+    applyModeUi();
+    if(typeof setView === "function") setView("collect");
+    else render();
+  }
+  function showModeGate(){
+    if(appMode === "hw") saveState();
+    if(appMode === "general") saveGeneralState();
+    closeSubsQuiet();
+    appMode = "pick";
+    applyModeUi();
+  }
+  function pickMode(mode){
+    const rem = document.getElementById("mgRemember");
+    writeModePref(mode, !!(rem && rem.checked));
+    if(mode === "hw") enterHw(); else enterGeneral();
+  }
+  function bootApp(){
+    const pref = readModePref();
+    if(pref && pref.auto && (pref.last === "hw" || pref.last === "general")){
+      if(pref.last === "hw") enterHw(); else enterGeneral();
+      return;
+    }
+    showModeGate();
+  }
+  document.getElementById("mgHw").addEventListener("click", () => pickMode("hw"));
+  document.getElementById("mgGen").addEventListener("click", () => pickMode("general"));
+  document.getElementById("modeBackBtn").addEventListener("click", showModeGate);
+  document.getElementById("genEstBtn").addEventListener("click", () => {
+    notice("見積書", "<p>見積書の作成は<strong>次のステップ</strong>で用意します。</p><p>今はこのモードの部材リスト（追加・編集・削除）を整えられます。HW部材集計のリストとは別です。</p>");
+  });
+  document.getElementById("genInvBtn").addEventListener("click", () => {
+    notice("請求書", "<p>請求書の作成は<strong>次のステップ</strong>で用意します。</p><p>今はこのモードの部材リスト（追加・編集・削除）を整えられます。HW部材集計のリストとは別です。</p>");
+  });
+  window.__HW_APP__ = {
+    WORK_KEY, GEN_KEY, MODE_KEY, BACKUP_KEY,
+    getMode: () => appMode,
+    enterHw, enterGeneral, showModeGate, pickMode,
+    copyMasterFromHw, initGeneralIfNeeded, snapshotHwIfNeeded,
+    getMaterialCount: () => materials.length,
+    getName: id => { const m = materials.find(x => x.id === id); return m ? m.name : null; },
+    getQty: id => { const m = materials.find(x => x.id === id); return m ? m.qty : null; },
+    getStock: id => { const m = materials.find(x => x.id === id); return m ? m.stock : undefined; },
+    hasPrice: (id, p) => { const m = materials.find(x => x.id === id); return !!(m && m.price === p); },
+    setName: (id, name) => { const m = materials.find(x => x.id === id); if(!m) return false; m.name = name; saveState(); return true; },
+    addTestItem: (name, cat) => {
+      const id = nextId++;
+      materials.push({ id, cat: cat || "その他", name, size: "", mode: "piece", price: 0, packLen: 0, qty: 0, cu: 1 });
+      saveState();
+      return id;
+    },
+    removeById: id => { const n = materials.length; materials = materials.filter(m => m.id !== id); saveState(); return materials.length < n; }
+  };
+
+  bootApp();
 </script>
 <!-- ===== v1.1 追加: 工事価格表（端末内だけに保存・リポには価格を一切入れない） ===== -->
 <style>
