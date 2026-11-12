@@ -6,3 +6,10 @@
 # puppeteer-core と Chrome がある環境で
 NODE_PATH=/path/to/node_modules node tests/general-mode.js
 ```
+
+
+`data-sync.cjs` / `app-storage.cjs` / `drive-adapter.cjs` は Googleドライブ同期（架空データ・偽のDrive。本番の価格や実ログインは使いません）。
+
+```bash
+node --test tests/data-sync.cjs tests/app-storage.cjs tests/drive-adapter.cjs
+```

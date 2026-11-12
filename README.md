@@ -3,7 +3,9 @@
 > 🦋 **葵ちゃんへ**：在庫を一緒に数えるときは [docs/AOI_INVENTORY_GUIDE.md](docs/AOI_INVENTORY_GUIDE.md) を見てね（取り込みファイルの作り方）。
 > 一般見積りモードの仕様（第1歩）は [docs/general-mode-spec.md](docs/general-mode-spec.md)。
 
-**v2.0（ブランチ作業中・本番はまだ v1.9）**: 起動時に「HW部材集計」か「一般見積り・請求書」を選べます。公開URLは変えません。HWのデータは今までどおり別保存のままです。一般モードでは見積書・請求書を作れます。
+**本番は v2.0**（https://akiyamanx.github.io/hw-parts-calculator/ ）。起動時に「HW部材集計」か「一般見積り・請求書」を選べます。
+
+**お試し版（このブランチ / `hw-parts-calculator-staging`）**: Googleドライブで複数端末の自動同期を試せます。本番のURL・保存データ・Drive上の業務Proデータには触れません。使い方は [docs/drive-sync.md](docs/drive-sync.md)。**この内容を本番の main にマージしないでください。**
 
 ---
 HYPER Water（HW）の設置工事で使った部材と数量を集計し、特定顧客送付用の集計表（PDF）まで出力できる、スマホ向けの単一HTMLアプリ。
@@ -30,7 +32,9 @@ HYPER Water（HW）の設置工事で使った部材と数量を集計し、特�
 
 | ファイル | 内容 |
 |---|---|
-| `hw-parts-calculator.html` | アプリ本体（単一ファイル・804行・65,710 bytes） |
+| `hw-parts-calculator.html` | アプリ本体 |
+| `js/` | お試し版の Drive 同期モジュール（本番 main にはまだ入れない） |
+| `docs/drive-sync.md` | 同期の使い方 |
 
 ## バージョン
 
