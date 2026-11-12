@@ -23,6 +23,7 @@
   ※v1.3: 部材ごとに価格の更新年月 pu:"YYYY-MM" を記録(単価/購入金額/入数/購入長を変えた時・新規追加・取り込みの新規・基準価格の一括更新)。古いデータは pu なし=「更新日なし」(日付は作らない)。表示: 集計の行(更新済みのみ小さく)・編集画面・重複をまとめる画面。まとめる時は残す方の価格と更新年月のまま
   ※v1.4: 全サブ画面(シート・棚卸し・集計表・工事価格表)に「← ホーム」。スマホの戻るボタン/ジェスチャーでもホーム(集計の部材表)へ(history.pushState)。サブ画面中は右上の工事価格表ボタンを隠し、ボタンは固定表示をやめてヘッダーと一緒にスクロール(重なり解消)
   ※v1.8: 過去の集計を同じ現場名で保存すると「上書きして更新／別の集計として保存／やめる」を選べる(上書きは一番新しい同名の記録を中身ごと入れ替えて先頭へ)。一覧の各行に🗑削除ボタン。集計表のタイトルは長いと文字を小さくして1行に(最小12px・それでも入らなければ折り返し。印刷/PDF・過去の記録も同じ)。
+  ※v2.1-stg (2026-11-13, お試し版のみ): Googleドライブでスマホ・タブレット・Surfaceの部材・集計・書類・自社情報を自動同期。工事価格表と接続トークンは端末だけ。本番ページには出さない。
   ※v2.0 第2歩(2026-11-11): 一般モードに自社情報・インボイス登録番号の設定、見積書・請求書の作成（書類番号なし）・保存・複製・削除・見積から請求、印刷/PDFを追加。単価は販売単価、原価は任意（書類には出さない）。HWモードの機能と保存キーは変えない。
   ※v2.0 第1歩(2026-11-11): 起動時に「HW部材集計」か「一般見積り・請求書」を選ぶスタート画面。HWは従来どおり（保存キーもそのまま）。一般モードの部材リストは初回だけHWマスターをコピー（名前・種類・規格・単位・入数・アプリ内の単価。使用数・在庫・過去の集計はコピーしない）。以後の編集は互いに影響しない。一般初回作成の前にHWキーを端末内へバックアップ（1回だけ・上書きしない）。見積書・請求書の本作成は次のステップ。公開URLは変えない。
   ※v1.9: 部材ごとの「在庫を数えるときの単位」(m.cnu・編集画面で選ぶ/自由入力。未設定は名前から自動: 長さ部材=m、ゴム板・袋類=枚、1袋=袋、1箱=箱、巻・テープ=巻、セット、保温材=本、他=個。値段計算は不変・バックアップに含む)。「📝 手書きの在庫表を印刷」= 今の部材リストから毎回作る手書き用の在庫確認表(A4縦・白黒・値段なし)。番号(=部材id)・品名・規格・数量の記入欄・単位。種類ごと(配管材はサイズ別)。種類のON/OFFあり。葵ちゃんは写真から番号で count を作る(docs/AOI_INVENTORY_GUIDE.md)。
@@ -689,6 +690,20 @@
     .doc-view{display:none !important;}
   }
   @page{size:A4 portrait;margin:12mm;}
+
+  /* v2.1-stg: お試し版バナーと同期バー */
+  #stagingBanner{position:fixed;top:0;left:0;right:0;z-index:4000;background:#c2410c;color:#fff;text-align:center;font:700 13px/1.5 system-ui,sans-serif;padding:6px 10px calc(6px + env(safe-area-inset-top,0px));}
+  #dataSyncBar{position:fixed;left:0;right:0;z-index:3990;display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 10px;font:13px/1.4 system-ui,sans-serif;background:#fff4e0;color:#9a3412;box-shadow:0 1px 4px rgba(0,0,0,.08);}
+  #dataSyncBar[data-kind="ok"]{background:#e7f6ed;color:#14532d;}
+  #dataSyncBar[data-kind="error"]{background:#fde8e8;color:#9b1c1c;}
+  #dataSyncBar[data-kind="warn"]{background:#fff4e0;color:#9a3412;}
+  #dataSyncBar #dataSyncText{flex:1;min-width:12em;}
+  #dataSyncBar button{border:1.5px solid currentColor;background:#fff;border-radius:9px;padding:5px 9px;font:700 12px/1.3 system-ui,sans-serif;color:inherit;cursor:pointer;}
+  #dataSyncBar #dataSyncBtn{background:#c2410c;color:#fff;border-color:#c2410c;}
+  #dataSyncBar[data-kind="ok"] #dataSyncBtn{background:#14532d;border-color:#14532d;}
+  body{padding-top:var(--hw-sync-top,0px);}
+  .mode-gate,.doc-view{top:var(--hw-sync-top,0px)!important;}
+  @media print{#stagingBanner,#dataSyncBar{display:none!important;}body{padding-top:0!important;}.mode-gate,.doc-view{top:0!important;}}
 </style>
 </head>
 <body class="mode-pick">
@@ -702,6 +717,7 @@
     <p class="mg-sub">見積書・請求書用の部材リスト（HWとは別のデータ）。初めて開くときは、HWの部材名などをコピーして用意します。</p>
     <label class="mg-rem"><input type="checkbox" id="mgRemember">次回からこのモードで開く（いつでも「モードを選ぶ」から戻れます）</label>
     <p class="mg-note">この画面の名前は「見積り・請求書」です。保存したページのアドレスは今までと同じです。</p>
+    <p class="mg-note" id="mgSyncNote">上の「接続して同期」を、アプリを開いたときに1回押すと、Googleドライブ経由でもう1台と自動で揃えます。工事価格表はこの端末だけに残ります。</p>
   </div>
 </div>
 <div class="wrap">
@@ -939,6 +955,13 @@
   </div>
 </div>
 
+<script src="js/app-profile.js"></script>
+<script src="js/app-storage.js"></script>
+<script src="js/hw-drive-auth.js"></script>
+<script src="js/hw-drive-adapter.js"></script>
+<script src="js/hw-data-sync.js"></script>
+<script src="js/hw-data-sync-ui.js"></script>
+<script>if(typeof AppStorage==="undefined"){window.AppStorage=window.localStorage;}</script>
 <script>
   var appMode = "pick"; // pick | hw | general  (v2.0)
   // ===== 部材データ(HW工事材料.xlsx より131件) =====
@@ -947,6 +970,13 @@
   const BUILTIN_SEED = JSON.parse(JSON.stringify(materials));   // v2.0: 初期部材の控え（loadStateで materials が変わっても残す）
   const CAT_ORDER = ["HIVP", "鋼管", "バルブ", "ホースニップル", "フレキニップル", "固定足・バンド", "基本水栓・継手", "電気部材", "その他", "別注文"];
   let nextId = materials.length + 1;
+  // 端末をまたいでもぶつかりにくい番号（同じ数字の部材が別物として混ざるのを防ぐ）
+  function allocMaterialId(){
+    const n = Math.max(nextId, Date.now() * 1000 + Math.floor(Math.random() * 1000));
+    nextId = n + 1;
+    return n;
+  }
+
   var jobs = [];   // v1.5: 過去の集計(新しいものが前)
   const QTY_MAX = 99999;   // v1.2: 使用数は直接入力（上限は誤入力よけの大きな値）
   // 使用数の入力を数値に: 全角数字OK・マイナス/文字/空は0・個数は整数(四捨五入)・mは小数1桁まで
@@ -960,8 +990,8 @@
   let openCats = {};
   // v1.7: サイズ別の小グループ（表示だけ。データは変えない）
   const SZ_KEY = "hwParts.sizeOpen.v1";
-  let openSz = {}; try{ openSz = JSON.parse(localStorage.getItem(SZ_KEY)) || {}; }catch(e){ openSz = {}; }
-  const saveSz = () => { if(appMode !== "hw") return; try{ localStorage.setItem(SZ_KEY, JSON.stringify(openSz)); }catch(e){} };
+  let openSz = {}; try{ openSz = JSON.parse(AppStorage.getItem(SZ_KEY)) || {}; }catch(e){ openSz = {}; }
+  const saveSz = () => { if(appMode !== "hw") return; try{ AppStorage.setItem(SZ_KEY, JSON.stringify(openSz)); }catch(e){} };
   const PIPE_A = [6, 8, 10, 13, 15, 20, 25, 30, 32, 40, 50, 65, 80, 100];
   const INCH_A = { "1/4": 8, "3/8": 10, "1/2": 15, "3/4": 20, "1": 25, "1-1/4": 32, "11/4": 32, "1-1/2": 40, "11/2": 40, "2": 50, "2-1/2": 65, "3": 80, "4": 100 };
   const BU_A = { 2: 8, 3: 10, 4: 15, 6: 20, 8: 25, 10: 32, 12: 40, 16: 50 };
@@ -1093,13 +1123,13 @@
   function saveState(){
     if(appMode === "general"){ saveGeneralState(); return; }
     if(appMode !== "hw") return;   // スタート画面ではHWキーを書かない
-    try{ localStorage.setItem(WORK_KEY, JSON.stringify(collectState())); }
+    try{ AppStorage.setItem(WORK_KEY, JSON.stringify(collectState())); }
     catch(e){ /* 保存不可でも無視して続行 */ }
   }
   // localStorageから復元（無ければ初期データのまま。壊れていても初期データで動く）
   function loadState(){
     try{
-      const raw = localStorage.getItem(WORK_KEY);
+      const raw = AppStorage.getItem(WORK_KEY);
       if(!raw){ migrateCats(); catUndo = null; return; }   // v1.7.1: 初めての端末は初期データに整理を当てるだけ
       const s = JSON.parse(raw);
       if(s && Array.isArray(s.materials) && s.materials.length){
@@ -1143,6 +1173,7 @@
         let note = "";
         if(res.r.updated > 0) note = "\n\n（旧いバックアップのため、" + priceMsg(res.r) + "）";
         saveState();
+        if(typeof HwDataSyncUI !== "undefined" && HwDataSyncUI.afterRestore) HwDataSyncUI.afterRestore();
         render(); if(view === "stock") renderStock();
         alert("バックアップから元に戻しました！" + note);
       }catch(err){ alert("読み込めませんでした：" + err.message); }
@@ -1200,7 +1231,7 @@
   // localStorageから読み込み(無ければ既定値。壊れていても既定値で動く)
   function loadParties(){
     try{
-      const raw = localStorage.getItem(PP_KEY);
+      const raw = AppStorage.getItem(PP_KEY);
       if(raw){ return Object.assign({}, PP_DEFAULTS, JSON.parse(raw)); }
     }catch(e){ /* localStorage不可/JSON破損 → 既定値にフォールバック */ }
     return Object.assign({}, PP_DEFAULTS);
@@ -1208,7 +1239,7 @@
   // localStorageへ保存(プライベートモード等で失敗しても画面動作は継続)
   function saveParties(){
     if(appMode !== "hw") return;
-    try{ localStorage.setItem(PP_KEY, JSON.stringify(printParties)); }
+    try{ AppStorage.setItem(PP_KEY, JSON.stringify(printParties)); }
     catch(e){ /* 保存不可でも無視して続行 */ }
   }
   // 設定カードの入力欄に現在値を流し込む
@@ -1647,7 +1678,7 @@
       document.getElementById("formErr").classList.add("show"); return;
     }
     const cat = newCatSel.value;
-    const nm9 = { id:nextId++, cat, name, size:document.getElementById("newSize").value.trim(), mode, price, packLen, qty:0, cu:1 };
+    const nm9 = { id:allocMaterialId(), cat, name, size:document.getElementById("newSize").value.trim(), mode, price, packLen, qty:0, cu:1 };
     if(mode !== 'length' && newPackQ()){ nm9.packQty = newPackQ(); nm9.packUnit = document.getElementById("newPackUnit").value; }
     nm9.pu = ymNow();
     applyMeta(nm9, addMeta.get());
@@ -2938,7 +2969,7 @@
       const note = r.note ? (memo ? memo + "／" + r.note : r.note) : (memo || "入出庫ファイル");
       if(r.kind === "newItem"){
         const o = r.nw;
-        const m = { id: nextId++, cat: o.cat, name: o.name, size: o.size, mode: o.mode, price: o.price, packLen: o.packLen, qty: 0, cu: 1, pu: ymNow() };
+        const m = { id: allocMaterialId(), cat: o.cat, name: o.name, size: o.size, mode: o.mode, price: o.price, packLen: o.packLen, qty: 0, cu: 1, pu: ymNow() };
         if(o.shop) m.shop = o.shop;
         if(o.al.length) m.al = o.al;
         if(o.reorder != null) m.reorder = o.reorder;
@@ -3608,10 +3639,10 @@
   }
   function snapshotHwIfNeeded(){
     try{
-      if(localStorage.getItem(BACKUP_KEY)) return false;   // 既にある控えは上書きしない
+      if(AppStorage.getItem(BACKUP_KEY)) return false;   // 既にある控えは上書きしない
       const snap = { at: new Date().toISOString(), keys: {} };
-      HW_LS_KEYS.forEach(k => { const v = localStorage.getItem(k); if(v != null) snap.keys[k] = v; });
-      localStorage.setItem(BACKUP_KEY, JSON.stringify(snap));
+      HW_LS_KEYS.forEach(k => { const v = AppStorage.getItem(k); if(v != null) snap.keys[k] = v; });
+      AppStorage.setItem(BACKUP_KEY, JSON.stringify(snap));
       return true;
     }catch(e){ return false; }
   }
@@ -3620,12 +3651,12 @@
   }
   function saveGeneralState(){
     if(appMode !== "general") return;
-    try{ localStorage.setItem(GEN_KEY, JSON.stringify(collectGeneralState())); }
+    try{ AppStorage.setItem(GEN_KEY, JSON.stringify(collectGeneralState())); }
     catch(e){ /* 保存不可でも無視して続行 */ }
   }
   function readHwMaterialsForCopy(){
     try{
-      const raw = localStorage.getItem(WORK_KEY);
+      const raw = AppStorage.getItem(WORK_KEY);
       if(raw){
         const st = JSON.parse(raw);
         if(st && Array.isArray(st.materials) && st.materials.length) return { list: st.materials, from: "hw" };
@@ -3637,15 +3668,15 @@
   }
   function initGeneralIfNeeded(){
     try{
-      const raw = localStorage.getItem(GEN_KEY);
+      const raw = AppStorage.getItem(GEN_KEY);
       if(raw){
         const st = JSON.parse(raw);
         // 空のリストでも「既に作った一般マスター」なら再コピーしない（全部削除した状態を守る）
         if(st && Array.isArray(st.materials) && (st.materials.length || st.kind === "general")) return "exists";
-        try{ localStorage.setItem(GEN_KEY + ".corrupt", raw); }catch(e){}
+        try{ AppStorage.setItem(GEN_KEY + ".corrupt", raw); }catch(e){}
       }
     }catch(e){
-      try{ const bad = localStorage.getItem(GEN_KEY); if(bad != null) localStorage.setItem(GEN_KEY + ".corrupt", bad); }catch(e2){}
+      try{ const bad = AppStorage.getItem(GEN_KEY); if(bad != null) AppStorage.setItem(GEN_KEY + ".corrupt", bad); }catch(e2){}
     }
     snapshotHwIfNeeded();
     const src = readHwMaterialsForCopy();
@@ -3660,12 +3691,12 @@
       nextId: Math.max(maxId + 1, copied.length + 1),
       materials: copied
     };
-    localStorage.setItem(GEN_KEY, JSON.stringify(state));
+    AppStorage.setItem(GEN_KEY, JSON.stringify(state));
     return "created";
   }
   function loadGeneralState(){
     try{
-      const raw = localStorage.getItem(GEN_KEY);
+      const raw = AppStorage.getItem(GEN_KEY);
       if(!raw) return false;
       const st = JSON.parse(raw);
       if(!st || !Array.isArray(st.materials) || !st.materials.length) return false;
@@ -3721,10 +3752,10 @@
     }
   }
   function readModePref(){
-    try{ return JSON.parse(localStorage.getItem(MODE_KEY) || "null"); }catch(e){ return null; }
+    try{ return JSON.parse(AppStorage.getItem(MODE_KEY) || "null"); }catch(e){ return null; }
   }
   function writeModePref(last, auto){
-    try{ localStorage.setItem(MODE_KEY, JSON.stringify({ last: last, auto: !!auto, savedAt: new Date().toISOString() })); }catch(e){}
+    try{ AppStorage.setItem(MODE_KEY, JSON.stringify({ last: last, auto: !!auto, savedAt: new Date().toISOString() })); }catch(e){}
   }
   function enterHw(){
     if(appMode === "general"){ if(currentDoc && currentDocDirty) persistCurrentDoc(); saveGeneralState(); }
@@ -3788,7 +3819,7 @@
 
   function loadGenSettings(){
     try{
-      const raw = localStorage.getItem(GEN_SET_KEY);
+      const raw = AppStorage.getItem(GEN_SET_KEY);
       if(!raw) return JSON.parse(JSON.stringify(SET_DEFAULTS));
       const s = JSON.parse(raw);
       const d = JSON.parse(JSON.stringify(SET_DEFAULTS));
@@ -3802,11 +3833,11 @@
   }
   function saveGenSettings(){
     if(appMode !== "general") return;
-    try{ localStorage.setItem(GEN_SET_KEY, JSON.stringify(genSettings)); }catch(e){}
+    try{ AppStorage.setItem(GEN_SET_KEY, JSON.stringify(genSettings)); }catch(e){}
   }
   function loadGenDocs(){
     try{
-      const raw = localStorage.getItem(GEN_DOCS_KEY);
+      const raw = AppStorage.getItem(GEN_DOCS_KEY);
       if(!raw) return [];
       const a = JSON.parse(raw);
       return Array.isArray(a) ? a.filter(d => d && d.id && (d.kind === "estimate" || d.kind === "invoice")).slice(0, DOC_MAX) : [];
@@ -3814,7 +3845,7 @@
   }
   function saveGenDocs(){
     if(appMode !== "general") return;
-    try{ localStorage.setItem(GEN_DOCS_KEY, JSON.stringify(genDocs.slice(0, DOC_MAX))); }catch(e){}
+    try{ AppStorage.setItem(GEN_DOCS_KEY, JSON.stringify(genDocs.slice(0, DOC_MAX))); }catch(e){}
   }
 
   // インボイス登録番号: 空=未登録OK。T + 数字13桁。数字13桁だけなら T を補う。
@@ -4135,7 +4166,7 @@
     }
     const found = materials.find(x => nfkc(x.name) === nfkc(name) && nfkc(x.size || "") === nfkc(ln.size || ""));
     if(found){ ln.mid = found.id; return; }
-    const id = nextId++;
+    const id = allocMaterialId();
     const unit = (ln.unit || "個").slice(0, 4);
     const item = { id, cat: "その他", name, size: (ln.size || "").trim(), mode: unit === "m" ? "length" : "piece", price: Math.max(0, Number(ln.price) || 0), packLen: unit === "m" ? 1 : 0, qty: 0, cu: 1 };
     if(unit === "m") item.cnu = "m"; else if(unit && unit !== "個") item.cnu = unit;
@@ -4466,7 +4497,7 @@
     hasPrice: (id, p) => { const m = materials.find(x => x.id === id); return !!(m && m.price === p); },
     setName: (id, name) => { const m = materials.find(x => x.id === id); if(!m) return false; m.name = name; saveState(); return true; },
     addTestItem: (name, cat) => {
-      const id = nextId++;
+      const id = allocMaterialId();
       materials.push({ id, cat: cat || "その他", name, size: "", mode: "piece", price: 0, packLen: 0, qty: 0, cu: 1 });
       saveState();
       return id;
@@ -4488,7 +4519,44 @@
     upsertMasterFromLine
   };
 
+  window.HwApp = {
+    isEditing: function(){
+      if(currentDocDirty) return true;
+      const a = document.activeElement;
+      if(a){
+        const tag = a.tagName;
+        if(a.isContentEditable || tag === "TEXTAREA" || tag === "SELECT" || (tag === "INPUT" && !/^(button|submit|checkbox|radio|range|file|reset|image)$/i.test(a.type || ""))) return true;
+      }
+      return false;
+    },
+    refreshFromStorage: function(){
+      try{
+        if(appMode === "hw"){
+          loadState();
+          printParties = loadParties();
+          if(typeof fillPartyFields === "function") fillPartyFields();
+          render();
+        } else if(appMode === "general"){
+          loadGeneralState();
+          genSettings = loadGenSettings();
+          genDocs = loadGenDocs();
+          if(currentDoc && currentDoc.id && !currentDocDirty){
+            const fresh = genDocs.find(d => d.id === currentDoc.id);
+            if(fresh) currentDoc = JSON.parse(JSON.stringify(fresh));
+          }
+          render();
+          const gs = document.getElementById("genSet");
+          if(gs && gs.classList.contains("open") && typeof drawGenSettings === "function") drawGenSettings();
+          const ed = document.getElementById("docEd");
+          if(ed && ed.classList.contains("open") && currentDoc && typeof drawDocEditor === "function"){
+            // 入力中は上で isEditing が止める。ここは保存済みの再描画用。
+          }
+        }
+      }catch(e){ console.error("hwsync: refresh_failed"); }
+    }
+  };
   bootApp();
+
 </script>
 <!-- ===== v1.1 追加: 工事価格表（端末内だけに保存・リポには価格を一切入れない） ===== -->
 <style>
@@ -4529,7 +4597,7 @@
   var LIB='https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js';
   var $=function(id){return document.getElementById(id);};
   function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
-  function load(){try{return JSON.parse(localStorage.getItem(KEY)||'null');}catch(e){return null;}}
+  function load(){try{return JSON.parse(AppStorage.getItem(KEY)||'null');}catch(e){return null;}}
   function loadLib(){return new Promise(function(ok,ng){
     if(window.XLSX)return ok(window.XLSX);
     var s=document.createElement('script');s.src=LIB;s.onload=function(){ok(window.XLSX);};
@@ -4592,13 +4660,13 @@
     loadLib().then(function(X){return f.arrayBuffer().then(function(b){return parse(X,b,f.name);});})
     .then(function(d){
       if(!d.rows.length)throw new Error('表の中身が見つかりませんでした');
-      try{localStorage.setItem(KEY,JSON.stringify(d));}catch(e){throw new Error('保存できませんでした（容量不足の可能性）');}
+      try{AppStorage.setItem(KEY,JSON.stringify(d));}catch(e){throw new Error('保存できませんでした（容量不足の可能性）');}
       render(d);})
     .catch(function(e){alert('読み込めませんでした：'+e.message);});};
   $('ptOpen').onclick=function(){render(load());$('ptOv').classList.add('on');};
   $('ptClose').onclick=function(){$('ptOv').classList.remove('on');};
   $('ptReplace').onclick=pick;
-  $('ptDel').onclick=function(){if(confirm('この端末に保存した工事価格表を削除しますか？\n（元のExcelファイルは消えません）')){localStorage.removeItem(KEY);render(null);}};
+  $('ptDel').onclick=function(){if(confirm('この端末に保存した工事価格表を削除しますか？\n（元のExcelファイルは消えません）')){AppStorage.removeItem(KEY);render(null);}};
 })();
 // v1.4: どの画面からもホーム(集計の部材表)へ戻る ＋ 端末の「戻る」対応
 (function(){
